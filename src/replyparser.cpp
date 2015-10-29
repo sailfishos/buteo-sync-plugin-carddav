@@ -222,7 +222,7 @@ QString ReplyParser::parseAddressbookHome(const QByteArray &addressbookUrlsRespo
     return addressbookHome;
 }
 
-QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformation(const QByteArray &addressbookInformationResponse) const
+QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformation(const QByteArray &addressbookInformationResponse, const QString &addressbooksHomePath) const
 {
     /* We expect a response of the form:
         <d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">
@@ -260,6 +260,15 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
         QVariantMap rmap = rv.toMap();
         ReplyParser::AddressBookInformation currInfo;
         currInfo.url = QUrl::fromPercentEncoding(rmap.value("href").toMap().value("@text").toString().toUtf8());
+        if (!addressbooksHomePath.isEmpty() &&
+               (currInfo.url == addressbooksHomePath ||
+                currInfo.url == QStringLiteral("%1/").arg(addressbooksHomePath) ||
+                (!currInfo.url.endsWith('/') &&
+                  addressbooksHomePath.endsWith('/') &&
+                  currInfo.url == addressbooksHomePath.mid(0, addressbooksHomePath.size()-1)))) {
+            LOG_DEBUG("ignoring addressbook-home-set response returned for addressbook information request:" << currInfo.url);
+            continue;
+        }
 
         // some services (e.g. Cozy) return multiple propstat elements in each response
         QVariantList propstats;

@@ -466,7 +466,7 @@ void CardDav::userInformationResponse()
     } else if (responseType == ReplyParser::AddressbookInformationResponse) {
         // the server responded with addressbook information instead
         // of user principal information.  Skip the next discovery step.
-        QList<ReplyParser::AddressBookInformation> infos = m_parser->parseAddressbookInformation(data);
+        QList<ReplyParser::AddressBookInformation> infos = m_parser->parseAddressbookInformation(data, QString());
         if (infos.isEmpty()) {
             LOG_WARNING(Q_FUNC_INFO << "unable to parse addressbook info from user principal response");
             emit error();
@@ -519,6 +519,7 @@ void CardDav::fetchAddressbooksInformation(const QString &addressbooksHomePath)
 {
     LOG_DEBUG(Q_FUNC_INFO << "requesting addressbook sync information");
     QNetworkReply *reply = m_request->addressbooksInformation(m_serverUrl, addressbooksHomePath);
+    reply->setProperty("addressbooksHomePath", addressbooksHomePath);
     if (!reply) {
         emit error();
         return;
@@ -531,6 +532,7 @@ void CardDav::fetchAddressbooksInformation(const QString &addressbooksHomePath)
 void CardDav::addressbooksInformationResponse()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    QString addressbooksHomePath = reply->property("addressbooksHomePath").toString();
     QByteArray data = reply->readAll();
     if (reply->error() != QNetworkReply::NoError) {
         int httpError = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -541,7 +543,7 @@ void CardDav::addressbooksInformationResponse()
         return;
     }
 
-    QList<ReplyParser::AddressBookInformation> infos = m_parser->parseAddressbookInformation(data);
+    QList<ReplyParser::AddressBookInformation> infos = m_parser->parseAddressbookInformation(data, addressbooksHomePath);
     if (infos.isEmpty()) {
         LOG_WARNING(Q_FUNC_INFO << "unable to parse addressbook info from response");
         emit error();
