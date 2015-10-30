@@ -19,7 +19,7 @@ BuildRequires:  pkgconfig(accounts-qt5) >= 1.13
 BuildRequires:  pkgconfig(libsignon-qt5)
 BuildRequires:  pkgconfig(libsailfishkeyprovider)
 BuildRequires:  pkgconfig(qtcontacts-sqlite-qt5-extensions) >= 0.2.18
-BuildRequires:  pkgconfig(contactcache-qt5)
+BuildRequires:  pkgconfig(contactcache-qt5) >= 0.1.5
 Requires: buteo-syncfw-qt5-msyncd
 
 %description

@@ -34,6 +34,9 @@
 #include <QContact>
 #include <QContactGuid>
 #include <QContactAvatar>
+#include <QContactDisplayLabel>
+#include <QContactName>
+#include <QContactNickname>
 
 #include <QVersitWriter>
 #include <QVersitDocument>
@@ -125,6 +128,34 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
     QContact importedContact = importedContacts.first();
     QStringList unsupportedProperties = m_unsupportedProperties.value(importedContact.detail<QContactGuid>().guid());
     m_unsupportedProperties.clear();
+
+    // If the contact has no structured name data, create a best-guess name for it.
+    // This may be the case if the server provides an FN property but no N property.
+    QString displaylabelField, nicknameField;
+    QContactName nameDetail;
+    Q_FOREACH (const QContactDetail &d, importedContact.details()) {
+        if (d.type() == QContactDetail::TypeName) {
+            nameDetail = d;
+        } else if (d.type() == QContactDetail::TypeDisplayLabel) {
+            displaylabelField = d.value(QContactDisplayLabel::FieldLabel).toString().trimmed();
+        } else if (d.type() == QContactDetail::TypeNickname) {
+            nicknameField = d.value(QContactNickname::FieldNickname).toString().trimmed();
+        }
+    }
+    if (nameDetail.isEmpty() || (nameDetail.firstName().isEmpty() && nameDetail.lastName().isEmpty())) {
+        // we have no valid name data but we may have display label or nickname data which we can decompose.
+        if (!displaylabelField.isEmpty()) {
+            SeasideCache::decomposeDisplayLabel(displaylabelField, &nameDetail);
+            importedContact.saveDetail(&nameDetail);
+            LOG_DEBUG("Decomposed vCard display name into structured name:" << nameDetail);
+        } else if (!nicknameField.isEmpty()) {
+            SeasideCache::decomposeDisplayLabel(nicknameField, &nameDetail);
+            importedContact.saveDetail(&nameDetail);
+            LOG_DEBUG("Decomposed vCard nickname into structured name:" << nameDetail);
+        } else {
+            LOG_WARNING("No structured name data exists in the vCard, contact will be unnamed!");
+        }
+    }
 
     // mark each detail of the contact as modifiable
     Q_FOREACH (QContactDetail det, importedContact.details()) {
