@@ -79,7 +79,7 @@ public:
 
     QString parseUserPrincipal(const QByteArray &userInformationResponse, ResponseType *responseType) const;
     QString parseAddressbookHome(const QByteArray &addressbookUrlsResponse) const;
-    QList<AddressBookInformation> parseAddressbookInformation(const QByteArray &addressbookInformationResponse) const;
+    QList<AddressBookInformation> parseAddressbookInformation(const QByteArray &addressbookInformationResponse, const QString &addressbooksHomePath) const;
     QList<ContactInformation> parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, QString *newSyncToken) const;
     QList<ContactInformation> parseContactMetadata(const QByteArray &contactMetadataResponse, const QString &addresbookUrl) const;
     QMap<QString, FullContactInformation> parseContactData(const QByteArray &contactData) const;

@@ -40,6 +40,10 @@
 #include <QtContacts/QContactManager>
 #include <QtContacts/QContactGuid>
 #include <QtContacts/QContactSyncTarget>
+#include <QtContacts/QContactPhoneNumber>
+#include <QtContacts/QContactAvatar>
+#include <QtContacts/QContactAddress>
+#include <QtContacts/QContactUrl>
 #include <QtContacts/QContactDetailFilter>
 #include <QtContacts/QContactIntersectionFilter>
 #include <QtContacts/QContactSyncTarget>
@@ -175,9 +179,11 @@ void Syncer::continueSync(const QList<QContact> &added, const QList<QContact> &m
     // in-memory version (QContact) and the exportable version (vCard) resulting in ETag updates server-side.
     // The downside is that changes to these details will not be upsynced unless another change also occurs.
     QSet<QContactDetail::DetailType> ignorableDetailTypes = getDefaultIgnorableDetailTypes();
+    ignorableDetailTypes.insert(QContactDetail::TypeGender);   // ignore differences in X-GENDER field when detecting delta.
     ignorableDetailTypes.insert(QContactDetail::TypeFavorite); // ignore differences in X-FAVORITE field when detecting delta.
     ignorableDetailTypes.insert(QContactDetail::TypeAvatar);   // ignore differences in PHOTO field when detecting delta.
     QHash<QContactDetail::DetailType, QSet<int> > ignorableDetailFields = getDefaultIgnorableDetailFields();
+    ignorableDetailFields[QContactDetail::TypeAddress] << QContactAddress::FieldSubTypes;         // and ADR subtypes
     ignorableDetailFields[QContactDetail::TypePhoneNumber] << QContactPhoneNumber::FieldSubTypes; // and TEL number subtypes
     ignorableDetailFields[QContactDetail::TypeUrl] << QContactUrl::FieldSubType;                  // and URL subtype
     if (!determineLocalChanges(&localSince, &locallyAdded, &locallyModified, &locallyDeleted,
