@@ -1,6 +1,6 @@
 Name:       buteo-sync-plugin-carddav
 Summary:    Syncs contact data from CardDAV services
-Version:    0.0.20
+Version:    0.0.21
 Release:    1
 Group:      System/Libraries
 License:    LGPLv2.1
