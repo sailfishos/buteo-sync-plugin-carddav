@@ -82,7 +82,7 @@ public:
     QList<AddressBookInformation> parseAddressbookInformation(const QByteArray &addressbookInformationResponse, const QString &addressbooksHomePath) const;
     QList<ContactInformation> parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, QString *newSyncToken) const;
     QList<ContactInformation> parseContactMetadata(const QByteArray &contactMetadataResponse, const QString &addresbookUrl) const;
-    QMap<QString, FullContactInformation> parseContactData(const QByteArray &contactData) const;
+    QMap<QString, FullContactInformation> parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const;
 
 private:
     Syncer *q;

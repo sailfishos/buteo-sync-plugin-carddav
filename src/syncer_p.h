@@ -84,6 +84,9 @@ private Q_SLOTS:
     void cardDavError(int errorCode = 0);
 
 private:
+    bool significantDifferences(QContact *a, QContact *b) const;
+
+private:
     friend class CardDav;
     friend class RequestGenerator;
     friend class ReplyParser;
@@ -111,6 +114,7 @@ private:
     QMap<QString, QList<ReplyParser::ContactInformation> > m_serverAdditions;     // contacts added server-side, per addressbook.
     QMap<QString, QList<ReplyParser::ContactInformation> > m_serverModifications; // contacts modified server-side, per addressbook.
     QMap<QString, QList<ReplyParser::ContactInformation> > m_serverDeletions;     // contacts deleted server-side, per addressbook.
+    QMultiMap<QString, QPair<QString, QContact> > m_serverAddModsByUid; // uid to <addressbookUrl, QContact>, for duplicate detection.
 
     // loaded from OOB data.
     QMap<QString, QStringList> m_addressbookContactGuids; // addressbookUrl to list of contact guids
