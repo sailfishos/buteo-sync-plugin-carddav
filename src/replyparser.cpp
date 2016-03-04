@@ -553,7 +553,7 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(const Q
     // we now need to determine deletions.
     QStringList contactGuidsInAddressbook = q->m_addressbookContactGuids[addressbookUrl];
     Q_FOREACH (const QString &guid, contactGuidsInAddressbook) {
-        const QString &uri(q->m_contactUris[guid]);
+        const QString &uri = q->m_contactUris[guid];
         if (!seenUris.contains(uri)) {
             // this uri wasn't listed in the report, so this contact must have been deleted.
             LOG_TRACE("Resource" << uri << "with guid" << guid << "was deleted on server");
@@ -569,7 +569,7 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(const Q
     return info;
 }
 
-QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData(const QByteArray &contactData) const
+QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const
 {
     /* We expect a response of the form:
         HTTP/1.1 207 Multi-status
@@ -649,17 +649,26 @@ QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData
         for ( ; it != q->m_contactUids.constEnd(); ++it) {
             // see if the UID exists in our map already
             if (it.value() == uid) {
-                // it does; use the local-device GUID instead.
-                guid.setGuid(it.key());
-                found = true;
-                break;
+                // check to make sure that it's from the same addressbook by inspecting the guid prefix
+                if (it.key().startsWith(QStringLiteral("%1:AB:%2:").arg(QString::number(q->m_accountId), addressbookUrl))) {
+                    // found existing; use the local-device GUID instead.
+                    LOG_DEBUG("Found identical UID:" << uid << "from this addressbook, guid:" << it.key() << "- using.");
+                    guid.setGuid(it.key());
+                    found = true;
+                    break;
+                } else {
+                    LOG_DEBUG("Found identical UID:" << uid << "from different addressbook, guid:" << it.key() << "- ignoring.");
+                }
             }
         }
         if (!found) {
-            // this is a server addition.  mutate the uid into a per-account device guid.
-            guid.setGuid(QStringLiteral("%1:%2").arg(q->m_accountId).arg(uid));
+            // this is a server addition.  mutate the uid into a per-account and per-addresbook device guid.
+            // RFC6352 only requires that the UID be unique within a single collection (addressbook).
+            // So, we set the guid to be a compound of the addressbook URI and the UID.
+            guid.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid));
             // also set the guid to uid mapping for the server-side addition.
             q->m_contactUids.insert(guid.guid(), uid);
+            LOG_DEBUG("Parsed pure server-addition with guid:" << guid.guid());
         }
         importedContact.saveDetail(&guid);
 

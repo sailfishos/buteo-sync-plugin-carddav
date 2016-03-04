@@ -788,11 +788,12 @@ void CardDav::contactsResponse()
 
     // fill out added/modified.  Also keep our addressbookContactGuids state up-to-date.
     // The addMods map is a map from server contact uri to <contact/unsupportedProperties/etag>.
-    QMap<QString, ReplyParser::FullContactInformation> addMods = m_parser->parseContactData(data);
+    QMap<QString, ReplyParser::FullContactInformation> addMods = m_parser->parseContactData(data, addressbookUrl);
     QMap<QString, ReplyParser::FullContactInformation>::const_iterator it = addMods.constBegin();
     for ( ; it != addMods.constEnd(); ++it) {
         if (q->m_serverAdditionIndices[addressbookUrl].contains(it.key())) {
-            QString guid = it.value().contact.detail<QContactGuid>().guid();
+            QContact c = it.value().contact;
+            QString guid = c.detail<QContactGuid>().guid();
             q->m_serverAdditions[addressbookUrl][q->m_serverAdditionIndices[addressbookUrl].value(it.key())].guid = guid;
             q->m_contactEtags[guid] = it.value().etag;
             q->m_contactUris[guid] = it.key();
@@ -802,13 +803,14 @@ void CardDav::contactsResponse()
             // Check to see if this server-side addition is actually just
             // a reported previously-upsynced local-side addition.
             if (q->m_contactIds.contains(guid)) {
-                QContact previouslyUpsynced = it.value().contact;
+                QContact previouslyUpsynced = c;
                 previouslyUpsynced.setId(QContactId::fromString(q->m_contactIds[guid]));
                 added.append(previouslyUpsynced);
             } else {
                 // pure server-side addition.
-                added.append(it.value().contact);
+                added.append(c);
             }
+            q->m_serverAddModsByUid.insert(q->m_contactUids[guid], qMakePair(addressbookUrl, c));
         } else if (q->m_serverModificationIndices[addressbookUrl].contains(it.key())) {
             QContact c = it.value().contact;
             QString guid = c.detail<QContactGuid>().guid();
@@ -820,6 +822,7 @@ void CardDav::contactsResponse()
                 c.setId(QContactId::fromString(q->m_contactIds[guid]));
             }
             modified.append(c);
+            q->m_serverAddModsByUid.insert(q->m_contactUids[guid], qMakePair(addressbookUrl, c));
         } else {
             LOG_WARNING(Q_FUNC_INFO << "ignoring unknown addition/modification:" << it.key());
         }
@@ -887,111 +890,177 @@ void CardDav::downsyncComplete()
     }
 }
 
+static QString transformIntoAddressbookSpecificGuid(const QString &guidstr, int accountId, const QString &addressbookUrl)
+{
+    QString retn;
+    if (guidstr.startsWith(QStringLiteral("%1:AB:%2:").arg(QString::number(accountId), addressbookUrl))) {
+        // nothing to do, already a guid for this addressbook
+        return guidstr;
+    } else if (guidstr.startsWith(QStringLiteral("%1:AB:").arg(accountId))) {
+        // guid for a different addressbook.
+        LOG_WARNING("error: guid for different addressbook:" << guidstr);
+        return guidstr; // return it anyway, rather than attempt to mangle it with this addressbookUrl also.
+    } else {
+        // transform into addressbook-url style GUID.
+        if (guidstr.startsWith(QStringLiteral("%1:").arg(accountId))) {
+            // already accountId prefixed (e.g., from a previous sync cycle prior to when we supported addressbookUrl-prefixed-guids
+            retn = QStringLiteral("%1:AB:%2:%3").arg(QString::number(accountId), addressbookUrl, guidstr.mid(guidstr.indexOf(':')+1));
+        } else {
+            // non-prefixed, device-side guid (e.g., a local contact addition)
+            retn = QStringLiteral("%1:AB:%2:%3").arg(QString::number(accountId), addressbookUrl, guidstr);
+        }
+    }
+    return retn;
+}
+
+static void setUpsyncContactGuid(QContact *c, const QString &uid)
+{
+    // in the case where the exact same contact is contained
+    // in multiple remote addressbooks, the syncContact generated
+    // locally may contain duplicated GUID data.  Filter these out
+    // and instead set the UID as the guid field for upsync.
+    QList<QContactGuid> guids = c->details<QContactGuid>();
+    for (int i = guids.size(); i > 1; --i) {
+        QContactGuid &g(guids[i-1]);
+        c->removeDetail(&g);
+    }
+
+    QContactGuid newGuid = c->detail<QContactGuid>();
+    newGuid.setGuid(uid);
+    c->saveDetail(&newGuid);
+}
+
 void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified, const QList<QContact> &removed)
 {
     LOG_DEBUG(Q_FUNC_INFO
              << "upsyncing updates to addressbook:" << addressbookUrl
              << ":" << added.count() << modified.count() << removed.count());
 
-    if (added.size() == 0 && modified.size() == 0 && removed.size() == 0) {
+    bool hadNonSpuriousChanges = false;
+    int spuriousModifications = 0;
+
+    // put local additions
+    for (int i = 0; i < added.size(); ++i) {
+        QContact c = added.at(i);
+        // generate a server-side uid
+        QString uid = QUuid::createUuid().toString().replace(QRegularExpression(QStringLiteral("[\\-{}]")), QString());
+        // transform into local-device guid
+        QString guid = QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid);
+        // generate a valid uri
+        QString uri = addressbookUrl + "/" + uid + ".vcf";
+        // update our state data
+        q->m_contactUids[guid] = uid;
+        q->m_contactUris[guid] = uri;
+        q->m_contactIds[guid] = c.id().toString();
+        // set the uid not guid so that the VCF UID is generated.
+        setUpsyncContactGuid(&c, uid);
+        // generate a vcard
+        QString vcard = m_converter->convertContactToVCard(c, QStringList());
+        // upload
+        QNetworkReply *reply = m_request->upsyncAddMod(m_serverUrl, uri, QString(), vcard);
+        if (!reply) {
+            emit error();
+            return;
+        }
+
+        m_upsyncRequests += 1;
+        hadNonSpuriousChanges = true;
+        reply->setProperty("addressbookUrl", addressbookUrl);
+        reply->setProperty("contactGuid", guid);
+        connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
+        connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
+    }
+
+    // put local modifications
+    for (int i = 0; i < modified.size(); ++i) {
+        QContact c = modified.at(i);
+        // reinstate the server-side UID into the guid detail
+        QString guidstr = c.detail<QContactGuid>().guid();
+        if (guidstr.isEmpty()) {
+            LOG_WARNING(Q_FUNC_INFO << "modified contact has no guid:" << c.id().toString());
+            continue; // TODO: this is actually an error.
+        }
+        guidstr = transformIntoAddressbookSpecificGuid(guidstr, q->m_accountId, addressbookUrl);
+        QString uidstr = q->m_contactUids[guidstr];
+        if (uidstr.isEmpty()) {
+            LOG_WARNING(Q_FUNC_INFO << "modified contact server uid unknown:" << c.id().toString() << guidstr);
+            continue; // TODO: this is actually an error.
+        }
+        setUpsyncContactGuid(&c, uidstr);
+        // now check to see if it's a spurious change caused by downsync of a remote addition/modification
+        // perhaps to the same contact in a different addressbook.
+        if (q->m_serverAddModsByUid.contains(uidstr)) {
+            bool spurious = true;
+            const QList<QPair<QString, QContact> > &addressbookContacts(q->m_serverAddModsByUid.values(uidstr));
+            for (int j = 0; j < addressbookContacts.size(); ++j) {
+                QContact downsyncedContact = addressbookContacts[j].second;
+                if (q->significantDifferences(&c, &downsyncedContact)) {
+                    spurious = false;
+                    break;
+                }
+            }
+            if (spurious) {
+                LOG_DEBUG(Q_FUNC_INFO << "not upsyncing spurious change to contact:" << guidstr);
+                spuriousModifications += 1;
+                continue;
+            }
+        }
+        // otherwise, convert to vcard and upsync to remote server.
+        QString vcard = m_converter->convertContactToVCard(c, q->m_contactUnsupportedProperties[guidstr]);
+        // upload
+        QNetworkReply *reply = m_request->upsyncAddMod(m_serverUrl,
+                q->m_contactUris[guidstr],
+                q->m_contactEtags[guidstr],
+                vcard);
+        if (!reply) {
+            emit error();
+            return;
+        }
+
+        m_upsyncRequests += 1;
+        hadNonSpuriousChanges = true;
+        reply->setProperty("addressbookUrl", addressbookUrl);
+        reply->setProperty("contactGuid", guidstr);
+        connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
+        connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
+    }
+
+    // delete local removals
+    for (int i = 0; i < removed.size(); ++i) {
+        QContact c = removed[i];
+        QString guidstr = c.detail<QContactGuid>().guid();
+        guidstr = transformIntoAddressbookSpecificGuid(guidstr, q->m_accountId, addressbookUrl);
+        QNetworkReply *reply = m_request->upsyncDeletion(m_serverUrl,
+                q->m_contactUris[guidstr],
+                q->m_contactEtags[guidstr]);
+        if (!reply) {
+            emit error();
+            return;
+        }
+
+        // clear state data for this (deleted) contact
+        q->m_contactEtags.remove(guidstr);
+        q->m_contactUris.remove(guidstr);
+        q->m_contactIds.remove(guidstr);
+        q->m_contactUids.remove(guidstr);
+        q->m_addressbookContactGuids[addressbookUrl].removeOne(guidstr);
+
+        m_upsyncRequests += 1;
+        hadNonSpuriousChanges = true;
+        reply->setProperty("addressbookUrl", addressbookUrl);
+        connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
+        connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
+    }
+
+    if (!hadNonSpuriousChanges || (added.size() == 0 && modified.size() == 0 && removed.size() == 0)) {
         // nothing to upsync.  Use a singleshot to avoid synchronously
         // decrementing the m_upsyncRequests count to zero if there
         // happens to be nothing to upsync to the first addressbook.
         m_upsyncRequests += 1;
         QTimer::singleShot(0, this, SLOT(upsyncComplete()));
-    } else {
-        // put local additions
-        for (int i = 0; i < added.size(); ++i) {
-            QContact c = added.at(i);
-            // generate a server-side uid
-            QString uid = QUuid::createUuid().toString().replace(QRegularExpression(QStringLiteral("[\\-{}]")), QString());
-            // transform into local-device guid
-            QString guid = QStringLiteral("%1:%2").arg(q->m_accountId).arg(uid);
-            // generate a valid uri
-            QString uri = addressbookUrl + "/" + uid + ".vcf";
-            // update our state data
-            q->m_contactUids[guid] = uid;
-            q->m_contactUris[guid] = uri;
-            q->m_contactIds[guid] = c.id().toString();
-            // set the uid not guid so that the UID is generated.
-            QContactGuid cguid = c.detail<QContactGuid>();
-            cguid.setGuid(uid);
-            c.saveDetail(&cguid);
-            // generate a vcard
-            QString vcard = m_converter->convertContactToVCard(c, QStringList());
-            // upload
-            QNetworkReply *reply = m_request->upsyncAddMod(m_serverUrl, uri, QString(), vcard);
-            if (!reply) {
-                emit error();
-                return;
-            }
-
-            m_upsyncRequests += 1;
-            reply->setProperty("addressbookUrl", addressbookUrl);
-            reply->setProperty("contactGuid", guid);
-            connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
-            connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
-        }
-
-        // put local modifications
-        for (int i = 0; i < modified.size(); ++i) {
-            QContact c = modified.at(i);
-            // reinstate the server-side UID into the guid detail
-            QContactGuid cguid = c.detail<QContactGuid>();
-            QString guidstr = c.detail<QContactGuid>().guid();
-            if (guidstr.isEmpty()) {
-                LOG_WARNING(Q_FUNC_INFO << "modified contact has no guid:" << c.id().toString());
-                continue; // TODO: this is actually an error.
-            }
-            QString uidstr = q->m_contactUids[guidstr];
-            if (uidstr.isEmpty()) {
-                LOG_WARNING(Q_FUNC_INFO << "modified contact server uid unknown:" << c.id().toString() << guidstr);
-                continue; // TODO: this is actually an error.
-            }
-            cguid.setGuid(uidstr);
-            c.saveDetail(&cguid);
-            QString vcard = m_converter->convertContactToVCard(c, q->m_contactUnsupportedProperties[guidstr]);
-            // upload
-            QNetworkReply *reply = m_request->upsyncAddMod(m_serverUrl,
-                    q->m_contactUris[guidstr],
-                    q->m_contactEtags[guidstr],
-                    vcard);
-            if (!reply) {
-                emit error();
-                return;
-            }
-
-            m_upsyncRequests += 1;
-            reply->setProperty("addressbookUrl", addressbookUrl);
-            reply->setProperty("contactGuid", guidstr);
-            connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
-            connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
-        }
-
-        // delete local removals
-        for (int i = 0; i < removed.size(); ++i) {
-            const QString &guidstr(removed[i].detail<QContactGuid>().guid());
-            QNetworkReply *reply = m_request->upsyncDeletion(m_serverUrl,
-                    q->m_contactUris[guidstr],
-                    q->m_contactEtags[guidstr]);
-            if (!reply) {
-                emit error();
-                return;
-            }
-
-            // clear state data for this (deleted) contact
-            q->m_contactEtags.remove(guidstr);
-            q->m_contactUris.remove(guidstr);
-            q->m_contactIds.remove(guidstr);
-            q->m_contactUids.remove(guidstr);
-            q->m_addressbookContactGuids[addressbookUrl].removeOne(guidstr);
-
-            m_upsyncRequests += 1;
-            reply->setProperty("addressbookUrl", addressbookUrl);
-            connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
-            connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
-        }
     }
+
+    LOG_DEBUG(Q_FUNC_INFO << "ignored" << spuriousModifications << "spurious updates to addressbook:" << addressbookUrl);
 }
 
 void CardDav::upsyncResponse()

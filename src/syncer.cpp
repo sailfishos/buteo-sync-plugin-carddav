@@ -608,3 +608,56 @@ bool Syncer::purgeExtraStateData(int accountId)
     }
     return true;
 }
+
+// helper function to detect spurious changes
+bool Syncer::significantDifferences(QContact *a, QContact *b) const
+{
+    // first, remove duplicate details from both a and b.
+    bool detailIsDuplicate = false;
+    QContact modA, modB;
+    QList<QContactDetail> adets = a->details(), bdets = b->details();
+    while (!adets.isEmpty()) {
+        detailIsDuplicate = false;
+        QContactDetail d = adets.takeLast();
+        Q_FOREACH (const QContactDetail &otherd, adets) {
+            if (otherd == d) {
+                detailIsDuplicate = true;
+                break;
+            }
+        }
+        if (!detailIsDuplicate) {
+            modA.saveDetail(&d);
+        }
+    }
+    while (!bdets.isEmpty()) {
+        detailIsDuplicate = false;
+        QContactDetail d = bdets.takeLast();
+        Q_FOREACH (const QContactDetail &otherd, bdets) {
+            if (otherd == d) {
+                detailIsDuplicate = true;
+                break;
+            }
+        }
+        if (!detailIsDuplicate) {
+            modB.saveDetail(&d);
+        }
+    }
+
+    // update the original contacts by removing duplicated details.
+    *a = modA;
+    *b = modB;
+
+    // Note: we may still upsync these ignorable details+fields, just don't look at them during delta detection.
+    // We need to do this, otherwise there can be infinite loops caused due to spurious differences between the
+    // in-memory version (QContact) and the exportable version (vCard) resulting in ETag updates server-side.
+    // The downside is that changes to these details will not be upsynced unless another change also occurs.
+    QSet<QContactDetail::DetailType> ignorableDetailTypes = getDefaultIgnorableDetailTypes();
+    ignorableDetailTypes.insert(QContactDetail::TypeGender);   // ignore differences in X-GENDER field when detecting delta.
+    ignorableDetailTypes.insert(QContactDetail::TypeFavorite); // ignore differences in X-FAVORITE field when detecting delta.
+    ignorableDetailTypes.insert(QContactDetail::TypeAvatar);   // ignore differences in PHOTO field when detecting delta.
+    QHash<QContactDetail::DetailType, QSet<int> > ignorableDetailFields = getDefaultIgnorableDetailFields();
+    ignorableDetailFields[QContactDetail::TypeAddress] << QContactAddress::FieldSubTypes;         // and ADR subtypes
+    ignorableDetailFields[QContactDetail::TypePhoneNumber] << QContactPhoneNumber::FieldSubTypes; // and TEL number subtypes
+    ignorableDetailFields[QContactDetail::TypeUrl] << QContactUrl::FieldSubType;                  // and URL subtype
+    return !exactContactMatchExistsInList(modA, QList<QContact>() << modB, ignorableDetailTypes, ignorableDetailFields);
+}
