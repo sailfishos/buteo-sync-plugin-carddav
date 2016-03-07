@@ -843,6 +843,14 @@ void CardDav::contactAddModsComplete(const QString &addressbookUrl)
     // fill out removed set, and remove any state data associated with removed contacts
     for (int i = 0; i < q->m_serverDeletions[addressbookUrl].size(); ++i) {
         QString guid = q->m_serverDeletions[addressbookUrl][i].guid;
+        if (!q->m_contactIds.contains(guid)) {
+            // check to see if we have an entry which matches the "old" guid form.
+            // if so, use the "old" guid form instead.
+            QString prefix = QStringLiteral("%1:AB:%2:").arg(QString::number(q->m_accountId), addressbookUrl);
+            if (guid.startsWith(prefix)) {
+                guid = QStringLiteral("%1:%2").arg(QString::number(q->m_accountId), guid.mid(prefix.length()));
+            }
+        }
 
         // create the contact to remove
         QContact doomed;
@@ -980,11 +988,19 @@ void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
             LOG_WARNING(Q_FUNC_INFO << "modified contact has no guid:" << c.id().toString());
             continue; // TODO: this is actually an error.
         }
+        QString oldguidstr = guidstr;
         guidstr = transformIntoAddressbookSpecificGuid(guidstr, q->m_accountId, addressbookUrl);
         QString uidstr = q->m_contactUids[guidstr];
         if (uidstr.isEmpty()) {
-            LOG_WARNING(Q_FUNC_INFO << "modified contact server uid unknown:" << c.id().toString() << guidstr);
-            continue; // TODO: this is actually an error.
+            // check to see if the old guid was used previously.
+            // this should only occur after the package upgrade, and not normally.
+            if (!q->m_contactUids.value(oldguidstr).isEmpty()) {
+                q->migrateGuidData(oldguidstr, guidstr, addressbookUrl);
+                uidstr = q->m_contactUids.value(guidstr);
+            } else {
+                LOG_WARNING(Q_FUNC_INFO << "modified contact server uid unknown:" << c.id().toString() << guidstr);
+                continue; // TODO: this is actually an error.
+            }
         }
         setUpsyncContactGuid(&c, uidstr);
         // now check to see if it's a spurious change caused by downsync of a remote addition/modification
@@ -1029,7 +1045,18 @@ void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
     for (int i = 0; i < removed.size(); ++i) {
         QContact c = removed[i];
         QString guidstr = c.detail<QContactGuid>().guid();
+        QString oldguidstr = guidstr;
         guidstr = transformIntoAddressbookSpecificGuid(guidstr, q->m_accountId, addressbookUrl);
+        if (q->m_contactUris.value(guidstr).isEmpty()) {
+            // check to see if the old guid was used previously.
+            // this should only occur after the package upgrade, and not normally.
+            if (!q->m_contactUris.value(oldguidstr).isEmpty()) {
+                q->migrateGuidData(oldguidstr, guidstr, addressbookUrl);
+            } else {
+                LOG_WARNING(Q_FUNC_INFO << "deleted contact server uri unknown:" << c.id().toString() << guidstr);
+                continue; // TODO: this is actually an error.
+            }
+        }
         QNetworkReply *reply = m_request->upsyncDeletion(m_serverUrl,
                 q->m_contactUris[guidstr],
                 q->m_contactEtags[guidstr]);

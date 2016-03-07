@@ -85,6 +85,7 @@ private Q_SLOTS:
 
 private:
     bool significantDifferences(QContact *a, QContact *b) const;
+    void migrateGuidData(const QString &oldguid, const QString &newguid, const QString &addressbookUrl);
 
 private:
     friend class CardDav;

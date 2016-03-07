@@ -645,6 +645,7 @@ QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData
             continue;
         }
         bool found = false;
+        QString migrateGuid;
         QMap<QString,QString>::const_iterator it = q->m_contactUids.constBegin();
         for ( ; it != q->m_contactUids.constEnd(); ++it) {
             // see if the UID exists in our map already
@@ -656,8 +657,17 @@ QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData
                     guid.setGuid(it.key());
                     found = true;
                     break;
-                } else {
+                } else if (it.key().startsWith(QStringLiteral("%1:AB:").arg(q->m_accountId))) {
+                    // this is a contact with a duplicate UID but from a different addressbook
                     LOG_DEBUG("Found identical UID:" << uid << "from different addressbook, guid:" << it.key() << "- ignoring.");
+                } else if (it.key().startsWith(QStringLiteral("%1:").arg(q->m_accountId))) {
+                    // this is a contact with a duplicate UID and we don't know which addresbook it's from.
+                    // this can only occur due to package upgrade (i.e., previously we didn't support duplicated UIDs at all).
+                    // in this case we can assume that this UID does identify this contact since otherwise sync would have failed due to duplicates.
+                    LOG_DEBUG("Found identical UID:" << uid << "from unknown addressbook due to old guid format, guid:" << it.key() << "- migrating.");
+                    migrateGuid = it.key();
+                    found = true;
+                    break;
                 }
             }
         }
@@ -669,6 +679,10 @@ QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData
             // also set the guid to uid mapping for the server-side addition.
             q->m_contactUids.insert(guid.guid(), uid);
             LOG_DEBUG("Parsed pure server-addition with guid:" << guid.guid());
+        } else if (!migrateGuid.isEmpty()) {
+            QString newguid = QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid);
+            q->migrateGuidData(migrateGuid, newguid, addressbookUrl); // migrate all state data for the old guid to the new one.
+            guid.setGuid(newguid);
         }
         importedContact.saveDetail(&guid);
 
