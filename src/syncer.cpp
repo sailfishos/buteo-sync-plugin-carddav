@@ -661,3 +661,16 @@ bool Syncer::significantDifferences(QContact *a, QContact *b) const
     ignorableDetailFields[QContactDetail::TypeUrl] << QContactUrl::FieldSubType;                  // and URL subtype
     return !exactContactMatchExistsInList(modA, QList<QContact>() << modB, ignorableDetailTypes, ignorableDetailFields);
 }
+
+// helper function to migrate old form guid data (accountId:uid) to new form (accountId:AB:addressbookUrl:uid)
+void Syncer::migrateGuidData(const QString &oldguid, const QString &newguid, const QString &addressbookUrl)
+{
+    LOG_DEBUG(Q_FUNC_INFO << "updating state information for old guid:" << oldguid << "to new guid:" << newguid);
+    m_contactUids.insert(newguid, m_contactUids.take(oldguid));
+    m_contactUnsupportedProperties.insert(newguid, m_contactUnsupportedProperties.take(oldguid));
+    m_contactUris.insert(newguid, m_contactUris.take(oldguid));
+    m_contactEtags.insert(newguid, m_contactEtags.take(oldguid));
+    m_contactIds.insert(newguid, m_contactIds.take(oldguid));
+    m_addressbookContactGuids[addressbookUrl].append(newguid);
+    m_addressbookContactGuids[addressbookUrl].removeOne(oldguid);
+}
