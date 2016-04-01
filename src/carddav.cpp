@@ -265,7 +265,7 @@ void CardDavVCardConverter::documentProcessed(const QVersitDocument &, QContact 
 
 void CardDavVCardConverter::contactProcessed(const QContact &c, QVersitDocument *d)
 {
-    // FN is a required field.  Add it if it does not exist.
+    // FN is a required field in vCard 3.0 and 4.0.  Add it if it does not exist.
     bool foundFN = false;
     Q_FOREACH (const QVersitProperty &p, d->properties()) {
         if (p.name() == QStringLiteral("FN")) {
@@ -273,11 +273,38 @@ void CardDavVCardConverter::contactProcessed(const QContact &c, QVersitDocument 
             break;
         }
     }
-    if (!foundFN) {
-        QVersitProperty fnProp;
-        fnProp.setName("FN");
-        fnProp.setValue(SeasideCache::generateDisplayLabel(c));
-        d->addProperty(fnProp);
+
+    // N is also a required field in vCard 3.0.  Add it if it does not exist.
+    bool foundN = false;
+    Q_FOREACH (const QVersitProperty &p, d->properties()) {
+        if (p.name() == QStringLiteral("N")) {
+            foundN = true;
+            break;
+        }
+    }
+
+    if (!foundFN || !foundN) {
+        QString displaylabel = SeasideCache::generateDisplayLabel(c);
+        if (!foundFN) {
+            QVersitProperty fnProp;
+            fnProp.setName("FN");
+            fnProp.setValue(displaylabel);
+            d->addProperty(fnProp);
+        }
+        if (!foundN) {
+            QContactName name = c.detail<QContactName>();
+            SeasideCache::decomposeDisplayLabel(displaylabel, &name);
+            if (name.firstName().isEmpty()) {
+                // If we could not decompose the display label (e.g., only one token)
+                // then just assume that the display label is a useful first name.
+                name.setFirstName(displaylabel);
+            }
+            QString nvalue = QStringLiteral("%1;%2;;;").arg(name.lastName(), name.firstName());
+            QVersitProperty nProp;
+            nProp.setName("N");
+            nProp.setValue(nvalue);
+            d->addProperty(nProp);
+        }
     }
 }
 
