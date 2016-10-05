@@ -674,3 +674,14 @@ void Syncer::migrateGuidData(const QString &oldguid, const QString &newguid, con
     m_addressbookContactGuids[addressbookUrl].append(newguid);
     m_addressbookContactGuids[addressbookUrl].removeOne(oldguid);
 }
+
+// helper function for the unit test only.
+void Syncer::clearAllGuidData()
+{
+    m_contactUids.clear();
+    m_contactUnsupportedProperties.clear();
+    m_contactUris.clear();
+    m_contactEtags.clear();
+    m_contactIds.clear();
+    m_addressbookContactGuids.clear();
+}

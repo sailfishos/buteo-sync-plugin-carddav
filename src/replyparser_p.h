@@ -89,5 +89,9 @@ private:
     mutable CardDavVCardConverter *m_converter;
 };
 
+Q_DECLARE_METATYPE(ReplyParser::AddressBookInformation)
+Q_DECLARE_METATYPE(ReplyParser::ContactInformation)
+Q_DECLARE_METATYPE(ReplyParser::FullContactInformation)
+
 #endif // REPLYPARSER_P_H
 

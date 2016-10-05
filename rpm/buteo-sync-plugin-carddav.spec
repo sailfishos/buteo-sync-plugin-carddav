@@ -25,6 +25,16 @@ Requires: buteo-syncfw-qt5-msyncd
 %description
 A Buteo plugin which syncs contact data from CardDAV services
 
+%package tests
+Summary:    Unit tests for buteo-sync-plugin-carddav
+Group:      System/Libraries
+BuildRequires:  pkgconfig(Qt5Test)
+Requires:   blts-tools
+Requires:   %{name} = %{version}-%{release}
+
+%description tests
+This package contains unit tests for the CardDAV Buteo sync plugin.
+
 %files
 %defattr(-,root,root,-)
 #out-of-process-plugin
@@ -33,6 +43,24 @@ A Buteo plugin which syncs contact data from CardDAV services
 #/usr/lib/buteo-plugins-qt5/libcarddav-client.so
 %config %{_sysconfdir}/buteo/profiles/client/carddav.xml
 %config %{_sysconfdir}/buteo/profiles/sync/carddav.Contacts.xml
+
+%files tests
+%defattr(-,root,root,-)
+/opt/tests/buteo/plugins/carddav/tests.xml
+/opt/tests/buteo/plugins/carddav/tst_replyparser
+/opt/tests/buteo/plugins/carddav/data/replyparser_userprincipal_empty.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_userprincipal_single-well-formed.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_addressbookhome_empty.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_addressbookhome_single-well-formed.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_addressbookinformation_empty.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_addressbookinformation_single-well-formed.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_synctokendelta_empty.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_synctokendelta_single-well-formed-add-mod-rem.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_synctokendelta_single-well-formed-addition.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactmetadata_empty.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactmetadata_single-well-formed-add-mod-rem-unch.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_empty.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-well-formed.xml
 
 %prep
 %setup -q -n %{name}-%{version}

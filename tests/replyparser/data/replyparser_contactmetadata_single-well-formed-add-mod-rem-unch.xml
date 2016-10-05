@@ -1,0 +1,40 @@
+<d:multistatus xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/newcard.vcf</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getetag>"0001-0001"</d:getetag> <!-- new uri/etag :. added -->
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/updatedcard.vcf</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getetag>"0002-0002"</d:getetag> <!-- etag changed :. updated -->
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+    <!-- the following card was returned last time, but not this time = deleted
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/deletedcard.vcf</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getetag>"0003-0001"</d:getetag>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+    -->
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/unchangedcard.vcf</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getetag>"0004-0001"</d:getetag> <!-- etag hasn't changed :. not updated -->
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+</d:multistatus>

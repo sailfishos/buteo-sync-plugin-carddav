@@ -39,6 +39,8 @@
 
 QTCONTACTS_USE_NAMESPACE
 
+class tst_replyparser;
+
 class Auth;
 class CardDav;
 class RequestGenerator;
@@ -86,11 +88,13 @@ private Q_SLOTS:
 private:
     bool significantDifferences(QContact *a, QContact *b) const;
     void migrateGuidData(const QString &oldguid, const QString &newguid, const QString &addressbookUrl);
+    void clearAllGuidData(); // used by the unit test only.
 
 private:
     friend class CardDav;
     friend class RequestGenerator;
     friend class ReplyParser;
+    friend class tst_replyparser;
     Buteo::SyncProfile *m_syncProfile;
     CardDav *m_cardDav;
     Auth *m_auth;
