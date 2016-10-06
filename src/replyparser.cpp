@@ -449,6 +449,9 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QB
             }
         }
         QString status = rmap.value("propstat").toMap().value("status").toMap().value("@text").toString();
+        if (status.isEmpty()) {
+            status = rmap.value("status").toMap().value("@text").toString();
+        }
         if (status.contains(QLatin1String("200 OK"))) {
             if (!currInfo.uri.endsWith(QStringLiteral(".vcf"), Qt::CaseInsensitive)) {
                 // this is probably a response for the addressbook resource,
@@ -464,7 +467,11 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QB
         } else {
             LOG_WARNING(Q_FUNC_INFO << "unknown response:" << currInfo.uri << currInfo.etag << status);
         }
-        info.append(currInfo);
+
+        // only append the info if some valid info was contained in the response.
+        if (!(currInfo.uri.isEmpty() && currInfo.etag.isEmpty() && status.isEmpty())) {
+            info.append(currInfo);
+        }
     }
 
     return info;
@@ -519,6 +526,9 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(const Q
         currInfo.uri = QUrl::fromPercentEncoding(rmap.value("href").toMap().value("@text").toString().toUtf8());
         currInfo.etag = rmap.value("propstat").toMap().value("prop").toMap().value("getetag").toMap().value("@text").toString();
         QString status = rmap.value("propstat").toMap().value("status").toMap().value("@text").toString();
+        if (status.isEmpty()) {
+            status = rmap.value("status").toMap().value("@text").toString();
+        }
         if (!currInfo.uri.endsWith(QStringLiteral(".vcf"), Qt::CaseInsensitive)) {
             // this is probably a response for the addressbook resource,
             // rather than for a contact resource within the addressbook.
