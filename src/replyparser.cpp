@@ -360,7 +360,7 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
         }
 
         // now check to see if we have all of the required information
-        if (resourcetypeStatus == StatusExplicitly2xxOk) {
+        if (addressbookResourceSpecified == StatusExplicitlyTrue && resourcetypeStatus == StatusExplicitly2xxOk) {
             // we definitely had a well-specified resourcetype response, with 200 OK status.
             LOG_DEBUG(Q_FUNC_INFO << "have addressbook resource with status OK:" << currInfo.url);
         } else if (propstats.count() == 1                          // only one response element

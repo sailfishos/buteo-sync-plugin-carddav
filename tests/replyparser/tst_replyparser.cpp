@@ -190,6 +190,30 @@ void tst_replyparser::parseAddressbookInformation_data()
         << QStringLiteral("data/replyparser_addressbookinformation_single-well-formed.xml")
         << QStringLiteral("/addressbooks/johndoe/")
         << infos;
+
+    infos.clear();
+    ReplyParser::AddressBookInformation a2;
+    a2.url = QStringLiteral("/addressbooks/johndoe/contacts/");
+    a2.displayName = QStringLiteral("Contacts");
+    a2.ctag = QStringLiteral("12345");
+    a2.syncToken = QString();
+    infos << a2;
+    QTest::newRow("addressbook information in response including non-collection resources")
+        << QStringLiteral("data/replyparser_addressbookinformation_addressbook-plus-contact.xml")
+        << QStringLiteral("/addressbooks/johndoe/")
+        << infos;
+
+    infos.clear();
+    ReplyParser::AddressBookInformation a3;
+    a3.url = QStringLiteral("/dav/johndoe/contacts.vcf/");
+    a3.displayName = QStringLiteral("Contacts");
+    a3.ctag = QStringLiteral("22222");
+    a3.syncToken = QString();
+    infos << a3;
+    QTest::newRow("addressbook information in response including principal and calendar collection")
+        << QStringLiteral("data/replyparser_addressbookinformation_addressbook-calendar-principal.xml")
+        << QStringLiteral("/dav/johndoe/")
+        << infos;
 }
 
 bool operator==(const ReplyParser::AddressBookInformation& first, const ReplyParser::AddressBookInformation& second)

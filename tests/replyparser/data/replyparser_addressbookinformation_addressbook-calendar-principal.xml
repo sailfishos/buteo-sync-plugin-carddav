@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav" xmlns:CS="http://calendarserver.org/ns/">
+    <response>
+        <href>/dav/johndoe/</href>
+        <propstat>
+            <prop>
+                <resourcetype>
+                    <principal />
+                    <collection />
+                </resourcetype>
+                <displayname>Principal</displayname>
+                <CS:getctag>11111</CS:getctag>
+            </prop>
+            <status>HTTP/1.1 200 OK</status>
+        </propstat>
+    </response>
+    <response>
+        <href>/dav/johndoe/contacts.vcf/</href>
+        <propstat>
+            <prop>
+                <resourcetype>
+                    <CR:addressbook />
+                    <collection />
+                </resourcetype>
+                <displayname>Contacts</displayname>
+                <CS:getctag>22222</CS:getctag>
+            </prop>
+            <status>HTTP/1.1 200 OK</status>
+        </propstat>
+    </response>
+    <response>
+        <href>/dav/johndoe/calendar.ics/</href>
+        <propstat>
+            <prop>
+                <resourcetype>
+                    <C:calendar />
+                    <collection />
+                </resourcetype>
+                <displayname>Calendar</displayname>
+                <CS:getctag>33333</CS:getctag>
+            </prop>
+            <status>HTTP/1.1 200 OK</status>
+        </propstat>
+    </response>
+</multistatus>
