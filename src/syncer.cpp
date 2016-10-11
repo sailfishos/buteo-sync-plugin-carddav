@@ -659,7 +659,7 @@ bool Syncer::significantDifferences(QContact *a, QContact *b) const
     ignorableDetailFields[QContactDetail::TypeAddress] << QContactAddress::FieldSubTypes;         // and ADR subtypes
     ignorableDetailFields[QContactDetail::TypePhoneNumber] << QContactPhoneNumber::FieldSubTypes; // and TEL number subtypes
     ignorableDetailFields[QContactDetail::TypeUrl] << QContactUrl::FieldSubType;                  // and URL subtype
-    return !exactContactMatchExistsInList(modA, QList<QContact>() << modB, ignorableDetailTypes, ignorableDetailFields);
+    return exactContactMatchExistsInList(modA, QList<QContact>() << modB, ignorableDetailTypes, ignorableDetailFields) < 0;
 }
 
 // helper function to migrate old form guid data (accountId:uid) to new form (accountId:AB:addressbookUrl:uid)
