@@ -188,9 +188,9 @@ QString ReplyParser::parseAddressbookHome(const QByteArray &addressbookUrlsRespo
                 <d:href>/</d:href>
                 <d:propstat>
                     <d:prop>
-                        <c:addressbook-home-set>
+                        <card:addressbook-home-set>
                             <d:href>/addressbooks/johndoe/</d:href>
-                        </c:addressbook-home-set>
+                        </card:addressbook-home-set>
                     </d:prop>
                     <d:status>HTTP/1.1 200 OK</d:status>
                 </d:propstat>
@@ -213,6 +213,10 @@ QString ReplyParser::parseAddressbookHome(const QByteArray &addressbookUrlsRespo
                 statusText = reader.readElementText();
             }
         }
+    }
+
+    if (reader.hasError()) {
+        LOG_WARNING(Q_FUNC_INFO << "error parsing response to addressbook home request:" << reader.errorString());
     }
 
     if (!statusText.contains(QLatin1String("200 OK"))) {

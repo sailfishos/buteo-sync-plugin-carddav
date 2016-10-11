@@ -1,0 +1,13 @@
+<d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:displayname>My Address Book</d:displayname>
+                <cs:getctag>3145</cs:getctag>
+                <d:sync-token>http://sabredav.org/ns/sync-token/3145</d:sync-token>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+</d:multistatus>

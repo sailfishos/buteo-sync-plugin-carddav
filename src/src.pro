@@ -1,37 +1,11 @@
 TARGET    = carddav-client
 
-QT       -= gui
-QT       += network dbus
-
-CONFIG += link_pkgconfig console
-PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5 libsailfishkeyprovider
-PKGCONFIG += Qt5Versit Qt5Contacts qtcontacts-sqlite-qt5-extensions contactcache-qt5
-QT += contacts-private
+include(src.pri)
 
 QMAKE_CXXFLAGS = -Wall \
     -g \
     -Wno-cast-align \
     -O2 -finline-functions
-
-SOURCES += \
-    carddavclient.cpp \
-    syncer.cpp \
-    auth.cpp \
-    carddav.cpp \
-    requestgenerator.cpp \
-    replyparser.cpp
-
-HEADERS += \
-    carddavclient.h \
-    syncer_p.h \
-    auth_p.h \
-    carddav_p.h \
-    requestgenerator_p.h \
-    replyparser_p.h
-
-OTHER_FILES += \
-    carddav.xml \
-    carddav.Contacts.xml
 
 !contains (DEFINES, BUTEO_OUT_OF_PROCESS_SUPPORT) {
     TEMPLATE = lib

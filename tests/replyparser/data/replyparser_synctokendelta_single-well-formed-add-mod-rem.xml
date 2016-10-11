@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<d:multistatus xmlns:d="DAV:">
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/newcard.vcf</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getetag>"33441-34321"</d:getetag>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/updatedcard.vcf</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getetag>"33541-34696"</d:getetag>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/deletedcard.vcf</d:href>
+        <d:status>HTTP/1.1 404 Not Found</d:status>
+    </d:response>
+    <d:sync-token>http://sabredav.org/ns/sync/5001</d:sync-token>
+ </d:multistatus>

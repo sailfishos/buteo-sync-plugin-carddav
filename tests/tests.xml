@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testdefinition version="1.0">
+   <suite name="buteo-sync-plugin-carddav" domain="mw">
+       <description>CardDAV sync plugin automatic tests</description>
+       <set name="unit-tests" feature="buteo-sync-plugin-carddav">
+           <description>Reply parser correctness automatic tests</description>
+           <case manual="false" name="tst_replyparser">
+               <step>/usr/sbin/run-blts-root /bin/su -g privileged -c '/opt/tests/buteo/plugins/carddav/tst_replyparser' nemo</step>
+           </case>
+       </set>
+   </suite>
+</testdefinition>
