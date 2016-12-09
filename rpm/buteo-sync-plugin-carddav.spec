@@ -68,6 +68,12 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-hs-notz-iso8601-bday.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-ns-notz-iso8601-bday.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-ns-do-iso8601-bday.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-ns-do-iso8601-bday-multiple.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-contact-multiple-formattedname.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-contact-multiple-name.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-contact-multiple-rev.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-contact-multiple-uid.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-contact-multiple-xgender.xml
 
 %prep
 %setup -q -n %{name}-%{version}
