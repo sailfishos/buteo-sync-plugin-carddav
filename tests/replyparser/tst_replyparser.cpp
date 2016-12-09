@@ -12,6 +12,7 @@
 #include <QContactName>
 #include <QContactPhoneNumber>
 #include <QContactGuid>
+#include <QContactBirthday>
 #include <qtcontacts-extensions.h>
 
 QTCONTACTS_USE_NAMESPACE
@@ -460,6 +461,88 @@ void tst_replyparser::parseContactData_data()
     //mContactUids.insert(cg.guid(), QStringLiteral("testy-testperson-uid"));
     QTest::newRow("single contact in well-formed contact data response")
         << QStringLiteral("data/replyparser_contactdata_single-well-formed.xml")
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
+        << QMap<QString, QString>()
+        << infos;
+
+    QContactBirthday cb;
+    cb.setDateTime(QDateTime(QDate(1990, 12, 31), QTime(2, 0, 0), Qt::UTC));
+    cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
+                                                 QStringLiteral("/addressbooks/johndoe/contacts/"),
+                                                 QStringLiteral("testy-testperson-uid-2")));
+    contact.saveDetail(&cg);
+    contact.saveDetail(&cb);
+    ReplyParser::FullContactInformation c2;
+    c2.contact = contact;
+    c2.etag = QStringLiteral("\"0001-0001\"");
+    infos.clear();
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson2.vcf"), c2);
+    QTest::newRow("single contact with fully-specified, hyphen-separated UTC ISO8601 BDAY")
+        << QStringLiteral("data/replyparser_contactdata_single-hs-utc-iso8601-bday.xml")
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
+        << QMap<QString, QString>()
+        << infos;
+
+    cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
+                                                 QStringLiteral("/addressbooks/johndoe/contacts/"),
+                                                 QStringLiteral("testy-testperson-uid-3")));
+    contact.saveDetail(&cg);
+    ReplyParser::FullContactInformation c3;
+    c3.contact = contact;
+    c3.etag = QStringLiteral("\"0001-0001\"");
+    infos.clear();
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson3.vcf"), c3);
+    QTest::newRow("single contact with fully-specified, non-separated UTC ISO8601 BDAY")
+        << QStringLiteral("data/replyparser_contactdata_single-ns-utc-iso8601-bday.xml")
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
+        << QMap<QString, QString>()
+        << infos;
+
+    cb.setDateTime(QDateTime(QDate(1990, 12, 31), QTime(2, 0, 0), Qt::LocalTime));
+    cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
+                                                 QStringLiteral("/addressbooks/johndoe/contacts/"),
+                                                 QStringLiteral("testy-testperson-uid-4")));
+    contact.saveDetail(&cg);
+    contact.saveDetail(&cb);
+    ReplyParser::FullContactInformation c4;
+    c4.contact = contact;
+    c4.etag = QStringLiteral("\"0001-0001\"");
+    infos.clear();
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson4.vcf"), c4);
+    QTest::newRow("single contact with fully-specified, hyphen-separated no-tz ISO8601 BDAY")
+        << QStringLiteral("data/replyparser_contactdata_single-hs-notz-iso8601-bday.xml")
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
+        << QMap<QString, QString>()
+        << infos;
+
+    cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
+                                                 QStringLiteral("/addressbooks/johndoe/contacts/"),
+                                                 QStringLiteral("testy-testperson-uid-5")));
+    contact.saveDetail(&cg);
+    ReplyParser::FullContactInformation c5;
+    c5.contact = contact;
+    c5.etag = QStringLiteral("\"0001-0001\"");
+    infos.clear();
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson5.vcf"), c5);
+    QTest::newRow("single contact with fully-specified, non-separated no-tz ISO8601 BDAY")
+        << QStringLiteral("data/replyparser_contactdata_single-ns-notz-iso8601-bday.xml")
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
+        << QMap<QString, QString>()
+        << infos;
+
+    cb.setDate(QDate(1990, 12, 31));
+    cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
+                                                 QStringLiteral("/addressbooks/johndoe/contacts/"),
+                                                 QStringLiteral("testy-testperson-uid-6")));
+    contact.saveDetail(&cg);
+    contact.saveDetail(&cb);
+    ReplyParser::FullContactInformation c6;
+    c6.contact = contact;
+    c6.etag = QStringLiteral("\"0001-0001\"");
+    infos.clear();
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson6.vcf"), c6);
+    QTest::newRow("single contact with non-separated, date-only ISO8601 BDAY")
+        << QStringLiteral("data/replyparser_contactdata_single-ns-do-iso8601-bday.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
         << QMap<QString, QString>()
         << infos;

@@ -1,0 +1,19 @@
+<d:multistatus xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/testytestperson2.vcf</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getetag>"0001-0001"</d:getetag>
+                <card:address-data>BEGIN:VCARD
+VERSION:3.0
+FN:Testy Testperson
+UID:testy-testperson-uid-2
+TEL;TYPE=HOME,CELL:555333111
+BDAY:1990-12-31T02:00:00Z
+END:VCARD
+                </card:address-data>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+</d:multistatus>
