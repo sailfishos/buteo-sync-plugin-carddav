@@ -37,6 +37,9 @@
 #include <QContactDisplayLabel>
 #include <QContactName>
 #include <QContactNickname>
+#include <QContactBirthday>
+#include <QContactTimestamp>
+#include <QContactGender>
 
 #include <QVersitWriter>
 #include <QVersitDocument>
@@ -131,15 +134,58 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
 
     // If the contact has no structured name data, create a best-guess name for it.
     // This may be the case if the server provides an FN property but no N property.
+    // Also, some detail types should be unique, so remove duplicates if present.
     QString displaylabelField, nicknameField;
     QContactName nameDetail;
-    Q_FOREACH (const QContactDetail &d, importedContact.details()) {
+    QSet<QContactDetail::DetailType> seenUniqueDetailTypes;
+    QList<QContactDetail> importedContactDetails = importedContact.details();
+    Q_FOREACH (const QContactDetail &d, importedContactDetails) {
         if (d.type() == QContactDetail::TypeName) {
             nameDetail = d;
         } else if (d.type() == QContactDetail::TypeDisplayLabel) {
             displaylabelField = d.value(QContactDisplayLabel::FieldLabel).toString().trimmed();
         } else if (d.type() == QContactDetail::TypeNickname) {
             nicknameField = d.value(QContactNickname::FieldNickname).toString().trimmed();
+        } else if (d.type() == QContactDetail::TypeBirthday) {
+            if (seenUniqueDetailTypes.contains(QContactDetail::TypeBirthday)) {
+                // duplicated BDAY field seen from vCard.
+                // remove this duplicate, else save will fail.
+                QContactBirthday dupBday(d);
+                importedContact.removeDetail(&dupBday);
+                LOG_DEBUG("Removed duplicate BDAY detail:" << dupBday);
+            } else {
+                seenUniqueDetailTypes.insert(QContactDetail::TypeBirthday);
+            }
+        } else if (d.type() == QContactDetail::TypeTimestamp) {
+            if (seenUniqueDetailTypes.contains(QContactDetail::TypeTimestamp)) {
+                // duplicated REV field seen from vCard.
+                // remove this duplicate, else save will fail.
+                QContactTimestamp dupRev(d);
+                importedContact.removeDetail(&dupRev);
+                LOG_DEBUG("Removed duplicate REV detail:" << dupRev);
+            } else {
+                seenUniqueDetailTypes.insert(QContactDetail::TypeTimestamp);
+            }
+        } else if (d.type() == QContactDetail::TypeGuid) {
+            if (seenUniqueDetailTypes.contains(QContactDetail::TypeGuid)) {
+                // duplicated UID field seen from vCard.
+                // remove this duplicate, else save will fail.
+                QContactGuid dupUid(d);
+                importedContact.removeDetail(&dupUid);
+                LOG_DEBUG("Removed duplicate UID detail:" << dupUid);
+            } else {
+                seenUniqueDetailTypes.insert(QContactDetail::TypeGuid);
+            }
+        } else if (d.type() == QContactDetail::TypeGender) {
+            if (seenUniqueDetailTypes.contains(QContactDetail::TypeGender)) {
+                // duplicated X-GENDER field seen from vCard.
+                // remove this duplicate, else save will fail.
+                QContactGender dupGender(d);
+                importedContact.removeDetail(&dupGender);
+                LOG_DEBUG("Removed duplicate X-GENDER detail:" << dupGender);
+            } else {
+                seenUniqueDetailTypes.insert(QContactDetail::TypeGender);
+            }
         }
     }
     if (nameDetail.isEmpty() || (nameDetail.firstName().isEmpty() && nameDetail.lastName().isEmpty())) {
