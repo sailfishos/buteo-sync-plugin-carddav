@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:">
+    <response>
+        <href>/carddav</href>
+        <propstat>
+            <status>HTTP/1.1 200 OK</status>
+            <prop>
+                <resourcetype xmlns="DAV:">
+                    <collection xmlns="DAV:"/>
+                    <principal xmlns="DAV:"/>
+                </resourcetype>
+                <displayname xmlns="DAV:">Display Name</displayname>
+            </prop>
+        </propstat>
+        <propstat>
+            <status>HTTP/1.1 403 Forbidden</status>
+            <prop>
+                <getctag xmlns="http://calendarserver.org/ns/"/>
+            </prop>
+        </propstat>
+    </response>
+    <response>
+        <href>/carddav/calendar-proxy-write/</href>
+        <propstat>
+            <status>HTTP/1.1 200 OK</status>
+            <prop>
+                <resourcetype xmlns="DAV:">
+                    <collection xmlns="DAV:"/>
+                    <principal xmlns="DAV:"/>
+                    <calendar-proxy-write xmlns="http://calendarserver.org/ns/"/>
+                </resourcetype>
+                <displayname xmlns="DAV:">Display Name Write Proxy</displayname>
+            </prop>
+        </propstat>
+        <propstat>
+            <status>HTTP/1.1 403 Forbidden</status>
+            <prop>
+                <getctag xmlns="http://calendarserver.org/ns/"/>
+            </prop>
+        </propstat>
+    </response>
+    <response>
+        <href>/carddav/calendar-proxy-read/</href>
+        <propstat>
+            <status>HTTP/1.1 200 OK</status>
+            <prop>
+                <resourcetype xmlns="DAV:">
+                    <collection xmlns="DAV:"/>
+                    <principal xmlns="DAV:"/>
+                    <calendar-proxy-read xmlns="http://calendarserver.org/ns/"/>
+                </resourcetype>
+                <displayname xmlns="DAV:">Display Name Read Proxy</displayname>
+            </prop>
+        </propstat>
+        <propstat>
+            <status>HTTP/1.1 403 Forbidden</status>
+            <prop>
+                <getctag xmlns="http://calendarserver.org/ns/"/>
+            </prop>
+        </propstat>
+    </response>
+</multistatus>

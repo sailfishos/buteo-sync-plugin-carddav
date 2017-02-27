@@ -655,6 +655,12 @@ void CardDav::addressbooksInformationResponse()
         return;
     }
 
+    // if we didn't parse the addressbooks home path via discovery, but instead were provided it by the user,
+    // then don't pass the path to the parser, as it uses it for cycle detection.
+    if (m_addressbookPath == addressbooksHomePath) {
+        addressbooksHomePath = QString();
+    }
+
     QList<ReplyParser::AddressBookInformation> infos = m_parser->parseAddressbookInformation(data, addressbooksHomePath);
     if (infos.isEmpty()) {
         LOG_WARNING(Q_FUNC_INFO << "unable to parse addressbook info from response");
