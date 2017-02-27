@@ -20,6 +20,8 @@ BuildRequires:  pkgconfig(libsignon-qt5)
 BuildRequires:  pkgconfig(libsailfishkeyprovider)
 BuildRequires:  pkgconfig(qtcontacts-sqlite-qt5-extensions) >= 0.2.18
 BuildRequires:  pkgconfig(contactcache-qt5) >= 0.1.5
+BuildRequires:  pkgconfig(libkcalcoren-qt5)
+BuildRequires:  pkgconfig(libmkcal-qt5)
 Requires: buteo-syncfw-qt5-msyncd
 
 %description
@@ -46,6 +48,7 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 
 %files tests
 %defattr(-,root,root,-)
+/opt/tests/buteo/plugins/carddav/cdavtool
 /opt/tests/buteo/plugins/carddav/tests.xml
 /opt/tests/buteo/plugins/carddav/tst_replyparser
 /opt/tests/buteo/plugins/carddav/data/replyparser_userprincipal_empty.xml

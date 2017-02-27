@@ -386,6 +386,7 @@ CardDav::CardDav(Syncer *parent,
     , m_serverUrl(serverUrl)
     , m_addressbookPath(addressbookPath)
     , m_discoveryStage(CardDav::DiscoveryStarted)
+    , m_addressbooksListOnly(false)
     , m_downsyncRequests(0)
     , m_upsyncRequests(0)
 {
@@ -403,6 +404,7 @@ CardDav::CardDav(Syncer *parent,
     , m_serverUrl(serverUrl)
     , m_addressbookPath(addressbookPath)
     , m_discoveryStage(CardDav::DiscoveryStarted)
+    , m_addressbooksListOnly(false)
     , m_downsyncRequests(0)
     , m_upsyncRequests(0)
 {
@@ -418,6 +420,12 @@ CardDav::~CardDav()
 void CardDav::errorOccurred(int httpError)
 {
     emit error(httpError);
+}
+
+void CardDav::determineAddressbooksList()
+{
+    m_addressbooksListOnly = true;
+    determineRemoteAMR();
 }
 
 void CardDav::determineRemoteAMR()
@@ -654,7 +662,17 @@ void CardDav::addressbooksInformationResponse()
         return;
     }
 
-    downsyncAddressbookContent(infos);
+    if (m_addressbooksListOnly) {
+        QStringList paths;
+        for (QList<ReplyParser::AddressBookInformation>::const_iterator it = infos.constBegin(); it != infos.constEnd(); ++it) {
+            if (!paths.contains(it->url)) {
+                paths.append(it->url);
+            }
+        }
+        emit addressbooksList(paths);
+    } else {
+        downsyncAddressbookContent(infos);
+    }
 }
 
 void CardDav::downsyncAddressbookContent(const QList<ReplyParser::AddressBookInformation> &infos)

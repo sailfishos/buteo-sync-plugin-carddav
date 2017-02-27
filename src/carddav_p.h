@@ -59,6 +59,8 @@ public:
             const QString &accessToken);
     ~CardDav();
 
+    void determineAddressbooksList(); // for cdavtool.
+
     void determineRemoteAMR();
     void upsyncUpdates(const QString &addressbookUrl,
                        const QList<QContact> &added,
@@ -71,6 +73,7 @@ Q_SIGNALS:
                        const QList<QContact> &modified,
                        const QList<QContact> &removed);
     void upsyncCompleted();
+    void addressbooksList(const QStringList &paths);
 
 private:
     void fetchUserInformation();
@@ -110,6 +113,7 @@ private:
     QString m_serverUrl;
     QString m_addressbookPath;
     DiscoveryStage m_discoveryStage;
+    bool m_addressbooksListOnly;
 
     QList<QContact> m_remoteAdditions;
     QList<QContact> m_remoteModifications;
