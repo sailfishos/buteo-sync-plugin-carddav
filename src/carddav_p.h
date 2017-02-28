@@ -114,6 +114,7 @@ private:
     QString m_addressbookPath;
     DiscoveryStage m_discoveryStage;
     bool m_addressbooksListOnly;
+    bool m_triedAddressbookPathAsHomeSetUrl;
 
     QList<QContact> m_remoteAdditions;
     QList<QContact> m_remoteModifications;
