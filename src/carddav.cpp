@@ -549,7 +549,10 @@ void CardDav::userInformationResponse()
             if (orig.path().endsWith(QStringLiteral(".well-known/carddav"))) {
                 // redirect as required, and change our server URL to point to the redirect URL.
                 LOG_DEBUG(Q_FUNC_INFO << "redirecting from:" << orig.toString() << "to:" << redir.toString());
-                m_serverUrl = QStringLiteral("%1://%2%3").arg(redir.scheme()).arg(redir.host()).arg(redir.path());
+                m_serverUrl = QStringLiteral("%1://%2%3")
+                        .arg(redir.scheme().isEmpty() ? orig.scheme() : redir.scheme())
+                        .arg(redir.host().isEmpty() ? orig.host() : redir.host())
+                        .arg(redir.path());
                 m_discoveryStage = CardDav::DiscoveryRedirected;
                 fetchUserInformation();
             } else {
