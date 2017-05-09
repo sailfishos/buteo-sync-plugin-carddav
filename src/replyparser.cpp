@@ -229,11 +229,15 @@ QString ReplyParser::parseAddressbookHome(const QByteArray &addressbookUrlsRespo
 QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformation(const QByteArray &addressbookInformationResponse, const QString &addressbooksHomePath) const
 {
     /* We expect a response of the form:
-        <d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">
+        <d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:card="urn:ietf:params:xml:ns:carddav">
             <d:response>
                 <d:href>/addressbooks/johndoe/contacts/</d:href>
                 <d:propstat>
                     <d:prop>
+                        <d:resourcetype>
+                            <d:collection />
+                            <card:addressbook />
+                        </d:resourcetype>
                         <d:displayname>My Address Book</d:displayname>
                         <cs:getctag>3145</cs:getctag>
                         <d:sync-token>http://sabredav.org/ns/sync-token/3145</d:sync-token>
@@ -307,19 +311,45 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
             bool thisPropstatIsForResourceType = false;
             if (prop.contains("resourcetype")) {
                 thisPropstatIsForResourceType = true;
-                QStringList resourceTypeKeys = prop.value("resourcetype").toMap().keys();
-                if ((resourceTypeKeys.size() == 1 && resourceTypeKeys.contains(QStringLiteral("collection"), Qt::CaseInsensitive))
-                        || (resourceTypeKeys.contains(QStringLiteral("addressbook"), Qt::CaseInsensitive))) {
-                    // This is probably a carddav addressbook collection.
-                    // Despite section 5.2 of RFC6352 stating that a CardDAV
-                    // server MUST return the 'addressbook' value in the resource types
-                    // property, some CardDAV implementations (eg, Memotoo) do not.
+                const QStringList resourceTypeKeys = prop.value("resourcetype").toMap().keys();
+                const bool resourcetypeText = resourceTypeKeys.contains(QStringLiteral("@text")); // non-empty element.
+                const bool resourcetypePrincipal = resourceTypeKeys.contains(QStringLiteral("principal"), Qt::CaseInsensitive);
+                const bool resourcetypeAddressbook = resourceTypeKeys.contains(QStringLiteral("addressbook"), Qt::CaseInsensitive);
+                const bool resourcetypeCollection = resourceTypeKeys.contains(QStringLiteral("collection"), Qt::CaseInsensitive);
+                const bool resourcetypeCalendar = resourceTypeKeys.contains(QStringLiteral("calendar"), Qt::CaseInsensitive);
+                const bool resourcetypeWriteProxy = resourceTypeKeys.contains(QStringLiteral("calendar-proxy-write"), Qt::CaseInsensitive);
+                const bool resourcetypeReadProxy = resourceTypeKeys.contains(QStringLiteral("calendar-proxy-read"), Qt::CaseInsensitive);
+                if (resourcetypeCalendar) {
+                    // the resource is explicitly described as a calendar resource, not an addressbook.
+                    addressbookResourceSpecified = StatusExplicitlyFalse;
+                    LOG_DEBUG(Q_FUNC_INFO << "have calendar resource:" << currInfo.url << ", ignoring");
+                } else if (resourcetypeWriteProxy || resourcetypeReadProxy) {
+                    // the resource is a proxy resource, we don't support these resources.
+                    addressbookResourceSpecified = StatusExplicitlyFalse;
+                    LOG_DEBUG(Q_FUNC_INFO << "have" << (resourcetypeWriteProxy ? "write" : "read") << "proxy resource:" << currInfo.url << ", ignoring");
+                } else if (resourcetypeAddressbook) {
+                    // the resource is explicitly described as an addressbook resource.
                     addressbookResourceSpecified = StatusExplicitlyTrue;
                     LOG_DEBUG(Q_FUNC_INFO << "have addressbook resource:" << currInfo.url);
+                } else if (resourcetypeCollection) {
+                    if (resourceTypeKeys.size() == 1 ||
+                            (resourceTypeKeys.size() == 2 && resourcetypeText) ||
+                            (resourceTypeKeys.size() == 3 && resourcetypeText && resourcetypePrincipal)) {
+                        // This is probably a carddav addressbook collection.
+                        // Despite section 5.2 of RFC6352 stating that a CardDAV
+                        // server MUST return the 'addressbook' value in the resource types
+                        // property, some CardDAV implementations (eg, Memotoo) do not.
+                        addressbookResourceSpecified = StatusExplicitlyTrue;
+                        LOG_DEBUG(Q_FUNC_INFO << "have probable addressbook resource:" << currInfo.url);
+                    } else {
+                        // we don't know how to handle this resource type.
+                        addressbookResourceSpecified = StatusExplicitlyFalse;
+                        LOG_DEBUG(Q_FUNC_INFO << "have unknown" << (resourcetypePrincipal ? "principal" : "") << "non-addressbook collection resource:" << currInfo.url);
+                    }
                 } else {
-                    // the resource is explicitly described as non-addressbook resource.
+                    // we don't know how to handle this resource type.
                     addressbookResourceSpecified = StatusExplicitlyFalse;
-                    LOG_DEBUG(Q_FUNC_INFO << "have non-addressbook resource:" << currInfo.url);
+                    LOG_DEBUG(Q_FUNC_INFO << "have unknown" << (resourcetypePrincipal ? "principal" : "") << "non-collection resource:" << currInfo.url);
                 }
             }
             // Some services (e.g. Cozy) return multiple propstats

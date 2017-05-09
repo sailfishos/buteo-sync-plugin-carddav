@@ -137,7 +137,7 @@ QNetworkReply *RequestGenerator::generateUpsyncRequest(const QString &url,
                          + m_accessToken).toUtf8());
     }
 
-    LOG_DEBUG("generateUpsyncRequest():" << m_accessToken << reqUrl << ":" << requestData.length() << "bytes");
+    LOG_DEBUG("generateUpsyncRequest():" << m_accessToken << reqUrl << requestType << ":" << requestData.length() << "bytes");
     Q_FOREACH (const QByteArray &headerName, req.rawHeaderList()) {
         LOG_DEBUG("   " << headerName << "=" << req.rawHeader(headerName));
     }
@@ -207,6 +207,7 @@ QNetworkReply *RequestGenerator::addressbooksInformation(const QString &serverUr
           "<d:prop>"
              "<d:resourcetype />"
              "<d:displayname />"
+             "<d:sync-token />"
              "<cs:getctag />"
           "</d:prop>"
         "</d:propfind>");
@@ -229,7 +230,9 @@ QNetworkReply *RequestGenerator::addressbookInformation(const QString &serverUrl
     QString requestStr = QStringLiteral(
         "<d:propfind xmlns:d=\"DAV:\" xmlns:cs=\"http://calendarserver.org/ns/\">"
           "<d:prop>"
+             "<d:resourcetype />"
              "<d:displayname />"
+             "<d:sync-token />"
              "<cs:getctag />"
           "</d:prop>"
         "</d:propfind>");

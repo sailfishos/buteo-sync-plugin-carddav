@@ -387,6 +387,7 @@ CardDav::CardDav(Syncer *parent,
     , m_addressbookPath(addressbookPath)
     , m_discoveryStage(CardDav::DiscoveryStarted)
     , m_addressbooksListOnly(false)
+    , m_triedAddressbookPathAsHomeSetUrl(false)
     , m_downsyncRequests(0)
     , m_upsyncRequests(0)
 {
@@ -549,7 +550,10 @@ void CardDav::userInformationResponse()
             if (orig.path().endsWith(QStringLiteral(".well-known/carddav"))) {
                 // redirect as required, and change our server URL to point to the redirect URL.
                 LOG_DEBUG(Q_FUNC_INFO << "redirecting from:" << orig.toString() << "to:" << redir.toString());
-                m_serverUrl = QStringLiteral("%1://%2%3").arg(redir.scheme()).arg(redir.host()).arg(redir.path());
+                m_serverUrl = QStringLiteral("%1://%2%3")
+                        .arg(redir.scheme().isEmpty() ? orig.scheme() : redir.scheme())
+                        .arg(redir.host().isEmpty() ? orig.host() : redir.host())
+                        .arg(redir.path());
                 m_discoveryStage = CardDav::DiscoveryRedirected;
                 fetchUserInformation();
             } else {
@@ -655,11 +659,25 @@ void CardDav::addressbooksInformationResponse()
         return;
     }
 
+    // if we didn't parse the addressbooks home path via discovery, but instead were provided it by the user,
+    // then don't pass the path to the parser, as it uses it for cycle detection.
+    if (m_addressbookPath == addressbooksHomePath) {
+        addressbooksHomePath = QString();
+    }
+
     QList<ReplyParser::AddressBookInformation> infos = m_parser->parseAddressbookInformation(data, addressbooksHomePath);
     if (infos.isEmpty()) {
-        LOG_WARNING(Q_FUNC_INFO << "unable to parse addressbook info from response");
-        emit error();
-        return;
+        if (!m_addressbookPath.isEmpty() && !m_triedAddressbookPathAsHomeSetUrl) {
+            // the user provided an addressbook path during account creation, which didn't work.
+            // it may not be an addressbook path but instead the home set url; try that.
+            LOG_DEBUG(Q_FUNC_INFO << "Given path is not addressbook path; trying as home set url");
+            m_triedAddressbookPathAsHomeSetUrl = true;
+            fetchAddressbookUrls(m_addressbookPath);
+        } else {
+            LOG_WARNING(Q_FUNC_INFO << "unable to parse addressbook info from response");
+            emit error();
+            return;
+        }
     }
 
     if (m_addressbooksListOnly) {
@@ -693,7 +711,7 @@ void CardDav::downsyncAddressbookContent(const QList<ReplyParser::AddressBookInf
             fetchContactMetadata(infos[i].url);
         } else if (infos[i].syncToken.isEmpty()) {
             // we cannot use sync-token for this addressbook, but instead ctag.
-            const QString &existingCtag(q->m_addressbookCtags[infos[i].url]); // from OOB
+            const QString existingCtag(q->m_addressbookCtags[infos[i].url]); // from OOB
             if (existingCtag.isEmpty()) {
                 // first time sync
                 q->m_addressbookCtags[infos[i].url] = infos[i].ctag; // insert
@@ -713,7 +731,7 @@ void CardDav::downsyncAddressbookContent(const QList<ReplyParser::AddressBookInf
             }
         } else {
             // the server supports webdav-sync for this addressbook.
-            const QString &existingSyncToken(q->m_addressbookSyncTokens[infos[i].url]); // from OOB
+            const QString existingSyncToken(q->m_addressbookSyncTokens[infos[i].url]); // from OOB
             // store the ctag anyway just in case the server has
             // forgotten the syncToken we cached from last time.
             if (!infos[i].ctag.isEmpty()) {

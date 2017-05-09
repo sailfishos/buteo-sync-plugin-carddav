@@ -217,6 +217,24 @@ void tst_replyparser::parseAddressbookInformation_data()
         << QStringLiteral("data/replyparser_addressbookinformation_addressbook-calendar-principal.xml")
         << QStringLiteral("/dav/johndoe/")
         << infos;
+
+    infos.clear(); // all of the contents should be ignored, since the addressbook-home-set path matches the addressbook href url.
+    QTest::newRow("addressbook information in response including principal and calendar collection, discovery-case")
+        << QStringLiteral("data/replyparser_addressbookinformation_addressbook-principal-proxy.xml")
+        << QStringLiteral("/carddav")
+        << infos;
+
+    infos.clear();
+    ReplyParser::AddressBookInformation a5;
+    a5.url = QStringLiteral("/carddav");
+    a5.displayName = QStringLiteral("Display Name");
+    a5.ctag = QString();
+    a5.syncToken = QString();
+    infos << a5;
+    QTest::newRow("addressbook information in response including principal and calendar collection, non-discovery-case")
+        << QStringLiteral("data/replyparser_addressbookinformation_addressbook-principal-proxy.xml")
+        << QString() // in the non-discovery case, the user provides the addressbook-home-set path directly.
+        << infos;    // we then don't pass that into the parseAddressbookInformation() function, to avoid incorrect cycle detection.
 }
 
 bool operator==(const ReplyParser::AddressBookInformation& first, const ReplyParser::AddressBookInformation& second)
