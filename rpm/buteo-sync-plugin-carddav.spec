@@ -87,8 +87,8 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 make %{?jobs:-j%jobs}
 
 %pre
-rm -f /home/nemo/.cache/msyncd/sync/client/carddav.xml
-rm -f /home/nemo/.cache/msyncd/sync/carddav.Contacts.xml
+rm -f /home/nemo/.cache/msyncd/sync/client/carddav.xml || :
+rm -f /home/nemo/.cache/msyncd/sync/carddav.Contacts.xml || :
 
 %install
 rm -rf %{buildroot}
