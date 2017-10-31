@@ -21,8 +21,10 @@
  */
 
 #include "auth_p.h"
-#include <sailfishkeyprovider.h>
 #include <LogMacros.h>
+
+#ifdef USE_SAILFISHKEYPROVIDER
+#include <sailfishkeyprovider.h>
 
 namespace {
     QString skp_storedKey(const QString &provider, const QString &service, const QString &key)
@@ -39,6 +41,7 @@ namespace {
         return retn;
     }
 }
+#endif // USE_SAILFISHKEYPROVIDER
 
 Auth::Auth(QObject *parent)
     : QObject(parent)
@@ -117,10 +120,16 @@ void Auth::signIn(int accountId)
     }
 
     QString providerName = m_account->providerName();
-    QString clientId = skp_storedKey(providerName, QString(), QStringLiteral("client_id"));
-    QString clientSecret = skp_storedKey(providerName, QString(), QStringLiteral("client_secret"));
-    QString consumerKey = skp_storedKey(providerName, QString(), QStringLiteral("consumer_key"));
-    QString consumerSecret = skp_storedKey(providerName, QString(), QStringLiteral("consumer_secret"));
+    QString clientId;
+    QString clientSecret;
+    QString consumerKey;
+    QString consumerSecret;
+#ifdef USE_SAILFISHKEYPROVIDER
+    clientId = skp_storedKey(providerName, QString(), QStringLiteral("client_id"));
+    clientSecret = skp_storedKey(providerName, QString(), QStringLiteral("client_secret"));
+    consumerKey = skp_storedKey(providerName, QString(), QStringLiteral("consumer_key"));
+    consumerSecret = skp_storedKey(providerName, QString(), QStringLiteral("consumer_secret"));
+#endif
 
     QVariantMap signonSessionData = accSrv.authData().parameters();
     signonSessionData.insert("UiPolicy", SignOn::NoUserInteractionPolicy);

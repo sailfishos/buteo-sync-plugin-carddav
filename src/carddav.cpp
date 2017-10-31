@@ -48,8 +48,10 @@
 #include <QVersitReader>
 #include <QVersitContactImporter>
 
+#ifdef USE_LIBCONTACTS
 #include <seasidepropertyhandler.h>
 #include <seasidecache.h>
+#endif
 
 #include <qtcontacts-extensions.h>
 
@@ -190,6 +192,7 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
     }
     if (nameDetail.isEmpty() || (nameDetail.firstName().isEmpty() && nameDetail.lastName().isEmpty())) {
         // we have no valid name data but we may have display label or nickname data which we can decompose.
+#ifdef USE_LIBCONTACTS
         if (!displaylabelField.isEmpty()) {
             SeasideCache::decomposeDisplayLabel(displaylabelField, &nameDetail);
             importedContact.saveDetail(&nameDetail);
@@ -201,6 +204,9 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
         } else {
             LOG_WARNING("No structured name data exists in the vCard, contact will be unnamed!");
         }
+#else
+        LOG_WARNING("No structured name data exists in the vCard, contact will be unnamed!");
+#endif
     }
 
     // mark each detail of the contact as modifiable
@@ -273,8 +279,16 @@ void CardDavVCardConverter::propertyProcessed(const QVersitDocument &, const QVe
     static QStringList supportedProperties(supportedPropertyNames());
     const QString propertyName(property.name().toUpper());
     if (propertyName == QLatin1String("PHOTO")) {
+#ifdef USE_LIBCONTACTS
         // use the standard PHOTO handler from Seaside libcontacts
         QContactAvatar newAvatar = SeasidePropertyHandler::avatarFromPhotoProperty(property);
+#else
+        QContactAvatar newAvatar;
+        QUrl url(property.variantValue().toString());
+        if (url.isValid() && !url.isLocalFile()) {
+            newAvatar.setImageUrl(url);
+        }
+#endif
         if (!newAvatar.isEmpty()) {
             updatedDetails->append(newAvatar);
         }
@@ -330,7 +344,16 @@ void CardDavVCardConverter::contactProcessed(const QContact &c, QVersitDocument 
     }
 
     if (!foundFN || !foundN) {
+#ifdef USE_LIBCONTACTS
         QString displaylabel = SeasideCache::generateDisplayLabel(c);
+#else
+        QContactName name = c.detail<QContactName>();
+        QString displaylabel = QStringList {
+            name.firstName(),
+            name.middleName(),
+            name.lastName(),
+        }.join(' ');
+#endif
         if (!foundFN) {
             QVersitProperty fnProp;
             fnProp.setName("FN");
@@ -339,7 +362,9 @@ void CardDavVCardConverter::contactProcessed(const QContact &c, QVersitDocument 
         }
         if (!foundN) {
             QContactName name = c.detail<QContactName>();
+#ifdef USE_LIBCONTACTS
             SeasideCache::decomposeDisplayLabel(displaylabel, &name);
+#endif
             if (name.firstName().isEmpty()) {
                 // If we could not decompose the display label (e.g., only one token)
                 // then just assume that the display label is a useful first name.
