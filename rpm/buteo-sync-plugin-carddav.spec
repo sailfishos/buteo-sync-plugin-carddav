@@ -83,7 +83,7 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 %setup -q -n %{name}-%{version}
 
 %build
-%qmake5 "DEFINES+=BUTEO_OUT_OF_PROCESS_SUPPORT"
+%qmake5 "DEFINES+=BUTEO_OUT_OF_PROCESS_SUPPORT" "CONFIG+=build-tools"
 make %{?jobs:-j%jobs}
 
 %pre

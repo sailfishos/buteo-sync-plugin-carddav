@@ -1,5 +1,10 @@
 TEMPLATE=subdirs
-SUBDIRS=src tests tools
+SUBDIRS=src tests
+
+CONFIG(build-tools) {
+    SUBDIRS += tools
+    tools.depends=src
+}
+
 tests.depends=src
-tools.depends=src
 OTHER_FILES+=rpm/buteo-sync-plugin-carddav.spec

@@ -1,10 +1,19 @@
 QT       -= gui
 QT       += network dbus
 
-CONFIG += link_pkgconfig console
-PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5 libsailfishkeyprovider
-PKGCONFIG += Qt5Versit Qt5Contacts qtcontacts-sqlite-qt5-extensions contactcache-qt5
-QT += contacts-private
+CONFIG += link_pkgconfig console c++11
+PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5
+PKGCONFIG += Qt5Versit Qt5Contacts qtcontacts-sqlite-qt5-extensions
+
+packagesExist(libsailfishkeyprovider) {
+    PKGCONFIG += libsailfishkeyprovider
+    DEFINES += USE_SAILFISHKEYPROVIDER
+}
+
+packagesExist(contactcache-qt5) {
+    PKGCONFIG += contactcache-qt5
+    DEFINES += USE_LIBCONTACTS
+}
 
 INCLUDEPATH += $$PWD
 
