@@ -818,7 +818,7 @@ void CardDav::immediateDeltaResponse()
     }
 
     QString newSyncToken;
-    QList<ReplyParser::ContactInformation> infos = m_parser->parseSyncTokenDelta(data, &newSyncToken);
+    QList<ReplyParser::ContactInformation> infos = m_parser->parseSyncTokenDelta(data, addressbookUrl, &newSyncToken);
     q->m_addressbookSyncTokens[addressbookUrl] = newSyncToken;
     fetchContacts(addressbookUrl, infos);
 }

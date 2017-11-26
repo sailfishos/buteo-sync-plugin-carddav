@@ -80,8 +80,8 @@ public:
     QString parseUserPrincipal(const QByteArray &userInformationResponse, ResponseType *responseType) const;
     QString parseAddressbookHome(const QByteArray &addressbookUrlsResponse) const;
     QList<AddressBookInformation> parseAddressbookInformation(const QByteArray &addressbookInformationResponse, const QString &addressbooksHomePath) const;
-    QList<ContactInformation> parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, QString *newSyncToken) const;
-    QList<ContactInformation> parseContactMetadata(const QByteArray &contactMetadataResponse, const QString &addresbookUrl) const;
+    QList<ContactInformation> parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, const QString &addressbookUrl, QString *newSyncToken) const;
+    QList<ContactInformation> parseContactMetadata(const QByteArray &contactMetadataResponse, const QString &addressbookUrl) const;
     QMap<QString, FullContactInformation> parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const;
 
 private:

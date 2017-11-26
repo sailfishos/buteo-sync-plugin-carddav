@@ -418,7 +418,7 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
     return infos;
 }
 
-QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, QString *newSyncToken) const
+QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, const QString &addressbookUrl, QString *newSyncToken) const
 {
     /* We expect a response of the form:
         <?xml version="1.0" encoding="utf-8" ?>
@@ -471,6 +471,13 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QB
         QVariantMap rmap = rv.toMap();
         ReplyParser::ContactInformation currInfo;
         currInfo.uri = QUrl::fromPercentEncoding(rmap.value("href").toMap().value("@text").toString().toUtf8());
+
+        // If the server address is in the URI, remove it.
+        // e.g: https://carddavserver.tld/<addressbookUrl>/...
+        int addressbookUrlIdx = currInfo.uri.indexOf(addressbookUrl);
+        if(addressbookUrlIdx > 0)
+            currInfo.uri.remove(0, addressbookUrlIdx);
+
         currInfo.etag = rmap.value("propstat").toMap().value("prop").toMap().value("getetag").toMap().value("@text").toString();
         QMap<QString, QString>::const_iterator it = q->m_contactUris.constBegin();
         for ( ; it != q->m_contactUris.constEnd(); ++it) {
@@ -554,6 +561,13 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(const Q
         QVariantMap rmap = rv.toMap();
         ReplyParser::ContactInformation currInfo;
         currInfo.uri = QUrl::fromPercentEncoding(rmap.value("href").toMap().value("@text").toString().toUtf8());
+
+        // If the server address is in the URI, remove it.
+        // e.g: https://carddavserver.tld/<addressbookUrl>/...
+        int addressbookUrlIdx = currInfo.uri.indexOf(addressbookUrl);
+        if(addressbookUrlIdx > 0)
+            currInfo.uri.remove(0, addressbookUrlIdx);
+
         currInfo.etag = rmap.value("propstat").toMap().value("prop").toMap().value("getetag").toMap().value("@text").toString();
         QString status = rmap.value("propstat").toMap().value("status").toMap().value("@text").toString();
         if (status.isEmpty()) {
@@ -670,6 +684,13 @@ QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData
     Q_FOREACH (const QVariant &rv, responses) {
         QVariantMap rmap = rv.toMap();
         QString uri = QUrl::fromPercentEncoding(rmap.value("href").toMap().value("@text").toString().toUtf8());
+
+        // If the server address is in the URI, remove it.
+        // e.g: https://carddavserver.tld/<addressbookUrl>/...
+        int addressbookUrlIdx = uri.indexOf(addressbookUrl);
+        if(addressbookUrlIdx > 0)
+            uri.remove(0, addressbookUrlIdx);
+
         QString etag = rmap.value("propstat").toMap().value("prop").toMap().value("getetag").toMap().value("@text").toString();
         QString vcard = rmap.value("propstat").toMap().value("prop").toMap().value("address-data").toMap().value("@text").toString();
 

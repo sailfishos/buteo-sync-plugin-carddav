@@ -335,7 +335,7 @@ void tst_replyparser::parseSyncTokenDelta()
 
     QString newSyncToken;
     QByteArray syncTokenDeltaResponse = f.readAll();
-    QList<ReplyParser::ContactInformation> contactInfo = m_rp.parseSyncTokenDelta(syncTokenDeltaResponse, &newSyncToken);
+    QList<ReplyParser::ContactInformation> contactInfo = m_rp.parseSyncTokenDelta(syncTokenDeltaResponse, QString(), &newSyncToken);
 
     QCOMPARE(newSyncToken, expectedNewSyncToken);
     QCOMPARE(contactInfo.size(), expectedContactInformation.size());
