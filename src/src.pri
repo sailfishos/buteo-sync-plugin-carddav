@@ -1,6 +1,10 @@
 QT       -= gui
 QT       += network dbus
 
+CONFIG(qt-contacts-private) {
+    QT += contacts-private
+}
+
 CONFIG += link_pkgconfig console c++11
 PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5
 PKGCONFIG += Qt5Versit Qt5Contacts qtcontacts-sqlite-qt5-extensions
