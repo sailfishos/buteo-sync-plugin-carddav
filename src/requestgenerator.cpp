@@ -359,6 +359,9 @@ QNetworkReply *RequestGenerator::contactMultiget(const QString &serverUrl, const
         }
         if (uri.endsWith(QStringLiteral(".vcf")) && uri.startsWith(addressbookPath)) {
             uriHrefs.append(QStringLiteral("<d:href>%1</d:href>").arg(href));
+        } else if (uri.startsWith(addressbookPath)) {
+            // contact resource which doesn't end in .vcf but is otherwise well-formed / fully specified.
+            uriHrefs.append(QStringLiteral("<d:href>%1</d:href>").arg(href));
         } else {
             uriHrefs.append(QStringLiteral("<d:href>%1/%2.vcf</d:href>").arg(addressbookPath).arg(href));
         }

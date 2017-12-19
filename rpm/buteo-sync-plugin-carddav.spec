@@ -65,6 +65,7 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 /opt/tests/buteo/plugins/carddav/data/replyparser_synctokendelta_single-well-formed-addition.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactmetadata_empty.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactmetadata_single-well-formed-add-mod-rem-unch.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_contactmetadata_single-vcf-and-non-vcf.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_empty.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-well-formed.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-hs-utc-iso8601-bday.xml

@@ -425,6 +425,27 @@ void tst_replyparser::parseContactMetadata_data()
         << mContactUris
         << mContactEtags
         << infos;
+
+    infos.clear();
+    mContactUris.clear();
+    mContactEtags.clear();
+    ReplyParser::ContactInformation c5;
+    c5.modType = ReplyParser::ContactInformation::Addition;
+    c5.uri = QStringLiteral("/addressbooks/johndoe/contacts/new.vcf");
+    c5.guid = QString();
+    c5.etag = QStringLiteral("\"0021-0021\"");
+    ReplyParser::ContactInformation c6;
+    c6.modType = ReplyParser::ContactInformation::Addition;
+    c6.uri = QStringLiteral("/addressbooks/johndoe/contacts/alsonew");
+    c6.guid = QString();
+    c6.etag = QStringLiteral("\"0022-0022\"");
+    infos << c5 << c6;
+        QTest::newRow("two contact additions with vcf and non-vcf extenions in well-formed sync token delta response")
+        << QStringLiteral("data/replyparser_contactmetadata_single-vcf-and-non-vcf.xml")
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
+        << mContactUris
+        << mContactEtags
+        << infos;
 }
 
 void tst_replyparser::parseContactMetadata()
