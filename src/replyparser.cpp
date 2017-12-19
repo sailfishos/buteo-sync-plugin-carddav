@@ -483,9 +483,17 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QB
             status = rmap.value("status").toMap().value("@text").toString();
         }
         if (status.contains(QLatin1String("200 OK"))) {
-            if (!currInfo.uri.endsWith(QStringLiteral(".vcf"), Qt::CaseInsensitive)) {
+            if (currInfo.uri.endsWith(QChar('/'))) {
                 // this is probably a response for the addressbook resource,
                 // rather than for a contact resource within the addressbook.
+                LOG_DEBUG(Q_FUNC_INFO << "ignoring non-contact (addressbook?) resource:" << currInfo.uri << currInfo.etag << status);
+                continue;
+            } else if (currInfo.uri.length() > 5
+                    && (currInfo.uri.at(currInfo.uri.length()-4) == QChar('.')
+                           || currInfo.uri.at(currInfo.uri.length()-3) == QChar('.'))
+                    && !currInfo.uri.endsWith(QStringLiteral(".vcf"), Qt::CaseInsensitive)) {
+                // the uri has a file suffix like .ics or .eml rather than .vcf.
+                // this is probably not a contact resource, but instead some other file reported erroneously.
                 LOG_DEBUG(Q_FUNC_INFO << "ignoring non-contact resource:" << currInfo.uri << currInfo.etag << status);
                 continue;
             }
@@ -559,12 +567,22 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(const Q
         if (status.isEmpty()) {
             status = rmap.value("status").toMap().value("@text").toString();
         }
-        if (!currInfo.uri.endsWith(QStringLiteral(".vcf"), Qt::CaseInsensitive)) {
+
+        if (currInfo.uri.endsWith(QChar('/'))) {
             // this is probably a response for the addressbook resource,
             // rather than for a contact resource within the addressbook.
+            LOG_DEBUG(Q_FUNC_INFO << "ignoring non-contact (addressbook?) resource:" << currInfo.uri << currInfo.etag << status);
+            continue;
+        } else if (currInfo.uri.length() > 5
+                && (currInfo.uri.at(currInfo.uri.length()-4) == QChar('.')
+                       || currInfo.uri.at(currInfo.uri.length()-3) == QChar('.'))
+                && !currInfo.uri.endsWith(QStringLiteral(".vcf"), Qt::CaseInsensitive)) {
+            // the uri has a file suffix like .ics or .eml rather than .vcf.
+            // this is probably not a contact resource, but instead some other file reported erroneously.
             LOG_DEBUG(Q_FUNC_INFO << "ignoring non-contact resource:" << currInfo.uri << currInfo.etag << status);
             continue;
         }
+
         QMap<QString, QString>::const_iterator it = q->m_contactUris.constBegin();
         for ( ; it != q->m_contactUris.constEnd(); ++it) {
             if (it.value() == currInfo.uri) {
