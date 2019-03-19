@@ -506,6 +506,11 @@ void CardDav::fetchUserInformation()
     */
 
     QUrl serverUrl(m_serverUrl);
+    if (serverUrl.scheme().isEmpty() && (serverUrl.host().isEmpty() || serverUrl.path().isEmpty())) {
+        // assume the supplied server url is like: "carddav.server.tld"
+        m_serverUrl = QStringLiteral("https://%1/").arg(m_serverUrl);
+        serverUrl = QUrl(m_serverUrl);
+    }
     QString wellKnownUrl = QStringLiteral("%1://%2/.well-known/carddav").arg(serverUrl.scheme()).arg(serverUrl.host());
     bool firstRequest = m_discoveryStage == CardDav::DiscoveryStarted;
     m_serverUrl = firstRequest && (serverUrl.path().isEmpty() || serverUrl.path() == QStringLiteral("/"))
