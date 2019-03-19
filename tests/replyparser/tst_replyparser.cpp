@@ -235,6 +235,18 @@ void tst_replyparser::parseAddressbookInformation_data()
         << QStringLiteral("data/replyparser_addressbookinformation_addressbook-principal-proxy.xml")
         << QString() // in the non-discovery case, the user provides the addressbook-home-set path directly.
         << infos;    // we then don't pass that into the parseAddressbookInformation() function, to avoid incorrect cycle detection.
+
+    infos.clear();
+    ReplyParser::AddressBookInformation a6;
+    a6.url = QStringLiteral("/carddav/accountname@server.tld/addressbook/");
+    a6.displayName = QStringLiteral("Display Name");
+    a6.ctag = QStringLiteral("123456789");
+    a6.syncToken = QString();
+    infos << a6;
+    QTest::newRow("addressbook information in response including home-set collections resource")
+        << QStringLiteral("data/replyparser_addressbookinformation_addressbook-plus-collection-resource.xml")
+        << QStringLiteral("/carddav/accountname%40server.tld/addressbook/")
+        << infos;
 }
 
 bool operator==(const ReplyParser::AddressBookInformation& first, const ReplyParser::AddressBookInformation& second)
@@ -259,6 +271,7 @@ void tst_replyparser::parseAddressbookInformation()
     QByteArray addressbookInformationResponse = f.readAll();
     QList<ReplyParser::AddressBookInformation> addressbookInfo = m_rp.parseAddressbookInformation(addressbookInformationResponse, addressbooksHomePath);
 
+    QCOMPARE(addressbookInfo.size(), expectedAddressbookInformation.size());
     QCOMPARE(addressbookInfo, expectedAddressbookInformation);
 }
 

@@ -31,7 +31,6 @@ A Buteo plugin which syncs contact data from CardDAV services
 Summary:    Unit tests for buteo-sync-plugin-carddav
 Group:      System/Libraries
 BuildRequires:  pkgconfig(Qt5Test)
-Requires:   blts-tools
 Requires:   %{name} = %{version}-%{release}
 
 %description tests
@@ -60,6 +59,7 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 /opt/tests/buteo/plugins/carddav/data/replyparser_addressbookinformation_addressbook-plus-contact.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_addressbookinformation_addressbook-calendar-principal.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_addressbookinformation_addressbook-principal-proxy.xml
+/opt/tests/buteo/plugins/carddav/data/replyparser_addressbookinformation_addressbook-plus-collection-resource.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_synctokendelta_empty.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_synctokendelta_single-well-formed-add-mod-rem.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_synctokendelta_single-well-formed-addition.xml
