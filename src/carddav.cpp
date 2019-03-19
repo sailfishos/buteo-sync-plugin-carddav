@@ -1089,7 +1089,7 @@ void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         // transform into local-device guid
         QString guid = QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid);
         // generate a valid uri
-        QString uri = addressbookUrl + "/" + uid + ".vcf";
+        QString uri = addressbookUrl + (addressbookUrl.endsWith('/') ? QString() : QStringLiteral("/")) + uid + QStringLiteral(".vcf");
         // update our state data
         q->m_contactUids[guid] = uid;
         q->m_contactUris[guid] = uri;
