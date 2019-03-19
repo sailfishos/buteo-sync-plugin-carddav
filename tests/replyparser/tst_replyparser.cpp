@@ -266,6 +266,7 @@ void tst_replyparser::parseSyncTokenDelta_data()
 {
     QTest::addColumn<QString>("xmlFilename");
     QTest::addColumn<QMapStringString>("injectContactUris");
+    QTest::addColumn<QString>("addressbookUrl");
     QTest::addColumn<QString>("expectedNewSyncToken");
     QTest::addColumn<QList<ReplyParser::ContactInformation> >("expectedContactInformation");
 
@@ -273,6 +274,7 @@ void tst_replyparser::parseSyncTokenDelta_data()
     QTest::newRow("empty sync token delta response")
         << QStringLiteral("data/replyparser_synctokendelta_empty.xml")
         << QMap<QString, QString>()
+        << QString()
         << QString()
         << infos;
 
@@ -286,6 +288,7 @@ void tst_replyparser::parseSyncTokenDelta_data()
     QTest::newRow("single contact addition in well-formed sync token delta response")
         << QStringLiteral("data/replyparser_synctokendelta_single-well-formed-addition.xml")
         << QMap<QString, QString>()
+        << QString()
         << QString()
         << infos;
 
@@ -307,7 +310,22 @@ void tst_replyparser::parseSyncTokenDelta_data()
     QTest::newRow("single contact addition + modification + removal in well-formed sync token delta response")
         << QStringLiteral("data/replyparser_synctokendelta_single-well-formed-add-mod-rem.xml")
         << mContactUris
+        << QString()
         << QStringLiteral("http://sabredav.org/ns/sync/5001")
+        << infos;
+
+    infos.clear();
+    ReplyParser::ContactInformation c4;
+    c4.modType = ReplyParser::ContactInformation::Addition;
+    c4.uri = QStringLiteral("/addressbooks/johndoe/contacts/newcard.vcf");
+    c4.guid = QString();
+    c4.etag = QStringLiteral("\"33441-34321\"");
+    infos << c4;
+    QTest::newRow("single contact addition with fully-specified-path sync token delta response")
+        << QStringLiteral("data/replyparser_synctokendelta_single-fullpath-addition.xml")
+        << QMap<QString, QString>()
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
+        << QString()
         << infos;
 }
 
@@ -323,6 +341,7 @@ void tst_replyparser::parseSyncTokenDelta()
 {
     QFETCH(QString, xmlFilename);
     QFETCH(QMapStringString, injectContactUris);
+    QFETCH(QString, addressbookUrl);
     QFETCH(QString, expectedNewSyncToken);
     QFETCH(QList<ReplyParser::ContactInformation>, expectedContactInformation);
 
@@ -335,7 +354,7 @@ void tst_replyparser::parseSyncTokenDelta()
 
     QString newSyncToken;
     QByteArray syncTokenDeltaResponse = f.readAll();
-    QList<ReplyParser::ContactInformation> contactInfo = m_rp.parseSyncTokenDelta(syncTokenDeltaResponse, QString(), &newSyncToken);
+    QList<ReplyParser::ContactInformation> contactInfo = m_rp.parseSyncTokenDelta(syncTokenDeltaResponse, addressbookUrl, &newSyncToken);
 
     QCOMPARE(newSyncToken, expectedNewSyncToken);
     QCOMPARE(contactInfo.size(), expectedContactInformation.size());
