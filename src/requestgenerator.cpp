@@ -36,6 +36,68 @@
 
 #include <QtContacts/QContact>
 
+namespace {
+    QUrl setRequestUrl(const QString &url, const QString &path, const QString &username, const QString &password)
+    {
+        QUrl ret(url);
+        QString modifiedPath(path);
+        if (!path.isEmpty()) {
+            // common case: the path may contain %40 instead of @ symbol,
+            // if the server returns paths in percent-encoded form.
+            // QUrl::setPath() will automatically percent-encode the input,
+            // so if we have received percent-encoded path, we need to undo
+            // the percent encoding first.  This is suboptimal but works
+            // at least for the common case.
+            if (path.contains(QStringLiteral("%40"))) {
+                modifiedPath = QUrl::fromPercentEncoding(path.toUtf8());
+            }
+
+            // override the path from the given url with the path argument.
+            // this is because the initial URL may be a user-principals URL
+            // but subsequent paths are not relative to that one, but instead
+            // are relative to the root path /
+            if (path.startsWith('/')) {
+                ret.setPath(modifiedPath);
+            } else {
+                ret.setPath('/' + modifiedPath);
+            }
+        }
+        if (!username.isEmpty() && !password.isEmpty()) {
+            ret.setUserName(username);
+            ret.setPassword(password);
+        }
+        return ret;
+    }
+
+    QNetworkRequest setRequestData(const QUrl &url,
+                                   const QByteArray &requestData,
+                                   const QString &depth,
+                                   const QString &ifMatch,
+                                   const QString &contentType,
+                                   const QString &accessToken)
+    {
+        QNetworkRequest ret(url);
+        if (!contentType.isEmpty()) {
+            ret.setHeader(QNetworkRequest::ContentTypeHeader,
+                          contentType.toUtf8());
+        }
+        ret.setHeader(QNetworkRequest::ContentLengthHeader,
+                      requestData.length());
+        if (!depth.isEmpty()) {
+            ret.setRawHeader("Depth", depth.toUtf8());
+        }
+        if (!ifMatch.isEmpty()) {
+            ret.setRawHeader("If-Match", ifMatch.toUtf8());
+        }
+        if (!accessToken.isEmpty()) {
+            ret.setRawHeader("Authorization",
+                             QString(QLatin1String("Bearer ")
+                             + accessToken).toUtf8());
+        }
+        return ret;
+    }
+}
+
 RequestGenerator::RequestGenerator(Syncer *parent,
                                    const QString &username,
                                    const QString &password)
@@ -58,38 +120,10 @@ QNetworkReply *RequestGenerator::generateRequest(const QString &url,
                                                  const QString &requestType,
                                                  const QString &request) const
 {
+    const QByteArray contentType("application/xml; charset=utf-8");
     QByteArray requestData(request.toUtf8());
-    QUrl reqUrl(url);
-    if (!path.isEmpty()) {
-        // override the path from the given url with the path argument.
-        // this is because the initial URL may be a user-principals URL
-        // but subsequent paths are not relative to that one, but instead
-        // are relative to the root path /
-        if (path.startsWith('/')) {
-            reqUrl.setPath(path);
-        } else {
-            reqUrl.setPath('/' + path);
-        }
-    }
-    if (!m_username.isEmpty() && !m_password.isEmpty()) {
-        reqUrl.setUserName(m_username);
-        reqUrl.setPassword(m_password);
-    }
-
-    QNetworkRequest req(reqUrl);
-    req.setHeader(QNetworkRequest::ContentTypeHeader,
-                  "application/xml; charset=utf-8");
-    req.setHeader(QNetworkRequest::ContentLengthHeader,
-                  requestData.length());
-    if (!depth.isEmpty()) {
-        req.setRawHeader("Depth", depth.toUtf8());
-    }
-    if (!m_accessToken.isEmpty()) {
-        req.setRawHeader("Authorization",
-                         QString(QLatin1String("Bearer ")
-                         + m_accessToken).toUtf8());
-    }
-
+    QUrl reqUrl(setRequestUrl(url, path, m_username, m_password));
+    QNetworkRequest req(setRequestData(reqUrl, requestData, depth, QString(), contentType, m_accessToken));
     QBuffer *requestDataBuffer = new QBuffer(q);
     requestDataBuffer->setData(requestData);
     LOG_DEBUG("generateRequest():"
@@ -106,36 +140,8 @@ QNetworkReply *RequestGenerator::generateUpsyncRequest(const QString &url,
                                                        const QString &request) const
 {
     QByteArray requestData(request.toUtf8());
-    QUrl reqUrl(url);
-    if (!path.isEmpty()) {
-        // override the path from the given url with the path argument.
-        // this is because the initial URL may be a user-principals URL
-        // but subsequent paths are not relative to that one, but instead
-        // are relative to the root path /
-        reqUrl.setPath(path);
-    }
-    if (!m_username.isEmpty() && !m_password.isEmpty()) {
-        reqUrl.setUserName(m_username);
-        reqUrl.setPassword(m_password);
-    }
-
-    QNetworkRequest req(reqUrl);
-    if (!contentType.isEmpty()) {
-        req.setHeader(QNetworkRequest::ContentTypeHeader,
-                      contentType);
-    }
-    if (!request.isEmpty()) {
-        req.setHeader(QNetworkRequest::ContentLengthHeader,
-                      requestData.length());
-    }
-    if (!ifMatch.isEmpty()) {
-        req.setRawHeader("If-Match", ifMatch.toUtf8());
-    }
-    if (!m_accessToken.isEmpty()) {
-        req.setRawHeader("Authorization",
-                         QString(QLatin1String("Bearer ")
-                         + m_accessToken).toUtf8());
-    }
+    QUrl reqUrl(setRequestUrl(url, path, m_username, m_password));
+    QNetworkRequest req(setRequestData(reqUrl, requestData, QString(), ifMatch, contentType, m_accessToken));
 
     LOG_DEBUG("generateUpsyncRequest():" << m_accessToken << reqUrl << requestType << ":" << requestData.length() << "bytes");
     Q_FOREACH (const QByteArray &headerName, req.rawHeaderList()) {

@@ -658,7 +658,7 @@ void CardDav::addressbookUrlsResponse()
 
 void CardDav::fetchAddressbooksInformation(const QString &addressbooksHomePath)
 {
-    LOG_DEBUG(Q_FUNC_INFO << "requesting addressbook sync information");
+    LOG_DEBUG(Q_FUNC_INFO << "requesting addressbook sync information from" << addressbooksHomePath);
     QNetworkReply *reply = m_request->addressbooksInformation(m_serverUrl, addressbooksHomePath);
     reply->setProperty("addressbooksHomePath", addressbooksHomePath);
     if (!reply) {
