@@ -1,0 +1,42 @@
+<?xml version='1.0' encoding='utf-8'?>
+<D:multistatus xmlns:D="DAV:">
+    <D:response>
+        <href xmlns="DAV:">/carddav/accountname%40server.tld/</href>
+        <D:propstat>
+            <D:prop>
+                <D:displayname>Display Name</D:displayname>
+                <D:resourcetype>
+                    <D:collection/>
+                </D:resourcetype>
+            </D:prop>
+            <status xmlns="DAV:">HTTP/1.1 200 OK</status>
+        </D:propstat>
+        <D:propstat>
+            <D:prop>
+                <D:sync-token/>
+                <getctag xmlns="http://calendarserver.org/ns/"/>
+            </D:prop>
+            <status xmlns="DAV:">HTTP/1.1 404 Not Found</status>
+        </D:propstat>
+    </D:response>
+    <D:response>
+        <href xmlns="DAV:">/carddav/accountname%40server.tld/addressbook/</href>
+        <D:propstat>
+            <D:prop>
+                <D:displayname>Display Name</D:displayname>
+                <D:resourcetype>
+                    <E:addressbook xmlns:E="urn:ietf:params:xml:ns:carddav"/>
+                    <D:collection/>
+                </D:resourcetype>
+                <getctag xmlns="http://calendarserver.org/ns/">123456789</getctag>
+            </D:prop>
+            <status xmlns="DAV:">HTTP/1.1 200 OK</status>
+        </D:propstat>
+        <D:propstat>
+            <D:prop>
+                <D:sync-token/>
+            </D:prop>
+            <status xmlns="DAV:">HTTP/1.1 404 Not Found</status>
+        </D:propstat>
+    </D:response>
+</D:multistatus>

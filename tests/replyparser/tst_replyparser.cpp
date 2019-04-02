@@ -235,6 +235,18 @@ void tst_replyparser::parseAddressbookInformation_data()
         << QStringLiteral("data/replyparser_addressbookinformation_addressbook-principal-proxy.xml")
         << QString() // in the non-discovery case, the user provides the addressbook-home-set path directly.
         << infos;    // we then don't pass that into the parseAddressbookInformation() function, to avoid incorrect cycle detection.
+
+    infos.clear();
+    ReplyParser::AddressBookInformation a6;
+    a6.url = QStringLiteral("/carddav/accountname@server.tld/addressbook/");
+    a6.displayName = QStringLiteral("Display Name");
+    a6.ctag = QStringLiteral("123456789");
+    a6.syncToken = QString();
+    infos << a6;
+    QTest::newRow("addressbook information in response including home-set collections resource")
+        << QStringLiteral("data/replyparser_addressbookinformation_addressbook-plus-collection-resource.xml")
+        << QStringLiteral("/carddav/accountname%40server.tld/addressbook/")
+        << infos;
 }
 
 bool operator==(const ReplyParser::AddressBookInformation& first, const ReplyParser::AddressBookInformation& second)
@@ -259,6 +271,7 @@ void tst_replyparser::parseAddressbookInformation()
     QByteArray addressbookInformationResponse = f.readAll();
     QList<ReplyParser::AddressBookInformation> addressbookInfo = m_rp.parseAddressbookInformation(addressbookInformationResponse, addressbooksHomePath);
 
+    QCOMPARE(addressbookInfo.size(), expectedAddressbookInformation.size());
     QCOMPARE(addressbookInfo, expectedAddressbookInformation);
 }
 
@@ -408,6 +421,27 @@ void tst_replyparser::parseContactMetadata_data()
     mContactEtags.insert(c4.guid, QStringLiteral("\"0004-0001\"")); // unchanged.
     QTest::newRow("single contact addition + modification + removal + unchanged in well-formed sync token delta response")
         << QStringLiteral("data/replyparser_contactmetadata_single-well-formed-add-mod-rem-unch.xml")
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
+        << mContactUris
+        << mContactEtags
+        << infos;
+
+    infos.clear();
+    mContactUris.clear();
+    mContactEtags.clear();
+    ReplyParser::ContactInformation c5;
+    c5.modType = ReplyParser::ContactInformation::Addition;
+    c5.uri = QStringLiteral("/addressbooks/johndoe/contacts/new.vcf");
+    c5.guid = QString();
+    c5.etag = QStringLiteral("\"0021-0021\"");
+    ReplyParser::ContactInformation c6;
+    c6.modType = ReplyParser::ContactInformation::Addition;
+    c6.uri = QStringLiteral("/addressbooks/johndoe/contacts/alsonew");
+    c6.guid = QString();
+    c6.etag = QStringLiteral("\"0022-0022\"");
+    infos << c5 << c6;
+        QTest::newRow("two contact additions with vcf and non-vcf extenions in well-formed sync token delta response")
+        << QStringLiteral("data/replyparser_contactmetadata_single-vcf-and-non-vcf.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
         << mContactUris
         << mContactEtags

@@ -506,6 +506,11 @@ void CardDav::fetchUserInformation()
     */
 
     QUrl serverUrl(m_serverUrl);
+    if (serverUrl.scheme().isEmpty() && (serverUrl.host().isEmpty() || serverUrl.path().isEmpty())) {
+        // assume the supplied server url is like: "carddav.server.tld"
+        m_serverUrl = QStringLiteral("https://%1/").arg(m_serverUrl);
+        serverUrl = QUrl(m_serverUrl);
+    }
     QString wellKnownUrl = QStringLiteral("%1://%2/.well-known/carddav").arg(serverUrl.scheme()).arg(serverUrl.host());
     bool firstRequest = m_discoveryStage == CardDav::DiscoveryStarted;
     m_serverUrl = firstRequest && (serverUrl.path().isEmpty() || serverUrl.path() == QStringLiteral("/"))
@@ -658,7 +663,7 @@ void CardDav::addressbookUrlsResponse()
 
 void CardDav::fetchAddressbooksInformation(const QString &addressbooksHomePath)
 {
-    LOG_DEBUG(Q_FUNC_INFO << "requesting addressbook sync information");
+    LOG_DEBUG(Q_FUNC_INFO << "requesting addressbook sync information from" << addressbooksHomePath);
     QNetworkReply *reply = m_request->addressbooksInformation(m_serverUrl, addressbooksHomePath);
     reply->setProperty("addressbooksHomePath", addressbooksHomePath);
     if (!reply) {
@@ -1089,7 +1094,7 @@ void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         // transform into local-device guid
         QString guid = QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid);
         // generate a valid uri
-        QString uri = addressbookUrl + "/" + uid + ".vcf";
+        QString uri = addressbookUrl + (addressbookUrl.endsWith('/') ? QString() : QStringLiteral("/")) + uid + QStringLiteral(".vcf");
         // update our state data
         q->m_contactUids[guid] = uid;
         q->m_contactUris[guid] = uri;

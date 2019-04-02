@@ -1,0 +1,20 @@
+<d:multistatus xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/new.vcf</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getetag>"0021-0021"</d:getetag> <!-- new uri/etag :. added -->
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+    <d:response>
+        <d:href>/addressbooks/johndoe/contacts/alsonew</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getetag>"0022-0022"</d:getetag> <!-- new uri/etag :. added -->
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+</d:multistatus>
