@@ -3,8 +3,8 @@ Summary:    Syncs contact data from CardDAV services
 Version:    0.0.30
 Release:    1
 Group:      System/Libraries
-License:    LGPLv2.1
-URL:        https://github.com/nemomobile/buteo-sync-plugin-carddav
+License:    LGPLv2
+URL:        https://git.sailfishos.org/mer-core/buteo-sync-plugin-carddav
 Source0:    %{name}-%{version}.tar.bz2
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Gui)
@@ -29,7 +29,6 @@ A Buteo plugin which syncs contact data from CardDAV services
 
 %package tests
 Summary:    Unit tests for buteo-sync-plugin-carddav
-Group:      System/Libraries
 BuildRequires:  pkgconfig(Qt5Test)
 Requires:   %{name} = %{version}-%{release}
 
@@ -44,6 +43,7 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 #/usr/lib/buteo-plugins-qt5/libcarddav-client.so
 %config %{_sysconfdir}/buteo/profiles/client/carddav.xml
 %config %{_sysconfdir}/buteo/profiles/sync/carddav.Contacts.xml
+%license LICENSE
 
 %files tests
 %defattr(-,root,root,-)
