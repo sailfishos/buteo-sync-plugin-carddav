@@ -511,7 +511,9 @@ void CardDav::fetchUserInformation()
         m_serverUrl = QStringLiteral("https://%1/").arg(m_serverUrl);
         serverUrl = QUrl(m_serverUrl);
     }
-    QString wellKnownUrl = QStringLiteral("%1://%2/.well-known/carddav").arg(serverUrl.scheme()).arg(serverUrl.host());
+    const QString wellKnownUrl = serverUrl.port() == -1
+                               ? QStringLiteral("%1://%2/.well-known/carddav").arg(serverUrl.scheme()).arg(serverUrl.host())
+                               : QStringLiteral("%1://%2:%3/.well-known/carddav").arg(serverUrl.scheme()).arg(serverUrl.host()).arg(serverUrl.port());
     bool firstRequest = m_discoveryStage == CardDav::DiscoveryStarted;
     m_serverUrl = firstRequest && (serverUrl.path().isEmpty() || serverUrl.path() == QStringLiteral("/"))
                 ? wellKnownUrl
@@ -554,7 +556,9 @@ void CardDav::userInformationResponse()
                 // SHOULD repeat its "bootstrapping" procedure using the
                 // appropriate ".well-known" URI instead.
                 LOG_DEBUG(Q_FUNC_INFO << "got HTTP response" << httpError << "to initial discovery request; trying well-known URI");
-                m_serverUrl = QStringLiteral("%1://%2/.well-known/carddav").arg(oldServerUrl.scheme()).arg(oldServerUrl.host());
+                m_serverUrl = oldServerUrl.port() == -1
+                            ? QStringLiteral("%1://%2/.well-known/carddav").arg(oldServerUrl.scheme()).arg(oldServerUrl.host())
+                            : QStringLiteral("%1://%2:%3/.well-known/carddav").arg(oldServerUrl.scheme()).arg(oldServerUrl.host()).arg(oldServerUrl.port());
                 fetchUserInformation(); // set initial context path to well-known URI.
             } else {
                 // From RFC 6764: if the server returns a 404 HTTP status response to the
@@ -563,7 +567,9 @@ void CardDav::userInformationResponse()
                 // We also do this on HTTP 405 in case some implementation is non-spec-conformant.
                 LOG_DEBUG(Q_FUNC_INFO << "got HTTP response" << httpError << "to well-known request; trying root URI");
                 m_discoveryStage = CardDav::DiscoveryTryRoot;
-                m_serverUrl = QStringLiteral("%1://%2/").arg(oldServerUrl.scheme()).arg(oldServerUrl.host());
+                m_serverUrl = oldServerUrl.port() == -1
+                            ? QStringLiteral("%1://%2/").arg(oldServerUrl.scheme()).arg(oldServerUrl.host())
+                            : QStringLiteral("%1://%2:%3/").arg(oldServerUrl.scheme()).arg(oldServerUrl.host()).arg(oldServerUrl.port());
                 fetchUserInformation();
             }
             return;
@@ -580,9 +586,18 @@ void CardDav::userInformationResponse()
             if (orig.path().endsWith(QStringLiteral(".well-known/carddav"))) {
                 // redirect as required, and change our server URL to point to the redirect URL.
                 LOG_DEBUG(Q_FUNC_INFO << "redirecting from:" << orig.toString() << "to:" << redir.toString());
-                m_serverUrl = QStringLiteral("%1://%2%3")
+                QString redirPort;
+                if (redir.port() != -1) {
+                    // the redirect was a url, and includes a port.  use it.
+                    redirPort = QStringLiteral(":%1").arg(redir.port());
+                } else if (redir.host().isEmpty() && orig.port() != -1) {
+                    // the redirect was a path, not a url.  use the original port.
+                    redirPort = QStringLiteral(":%1").arg(orig.port());
+                }
+                m_serverUrl = QStringLiteral("%1://%2%3%4")
                         .arg(redir.scheme().isEmpty() ? orig.scheme() : redir.scheme())
                         .arg(redir.host().isEmpty() ? orig.host() : redir.host())
+                        .arg(redirPort)
                         .arg(redir.path());
                 m_discoveryStage = CardDav::DiscoveryRedirected;
                 fetchUserInformation();
