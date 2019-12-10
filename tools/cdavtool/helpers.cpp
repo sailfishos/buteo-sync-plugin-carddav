@@ -320,11 +320,14 @@ void CalDAVDiscovery::requestUserPrincipalUrlFinished()
                 originalUrl.setPath(discoveryPath);
             }
 
+            QUrl sanitizedRedirectUrl = redirectUrl;
+            sanitizedRedirectUrl.setUserName(QString());
+            sanitizedRedirectUrl.setPassword(QString());
             if (originalUrl.path().endsWith(QStringLiteral(".well-known/caldav"))) {
-                qDebug() << "being redirected from" << originalUrl << "to" << redirectUrl;
+                qDebug() << "being redirected from" << originalUrl << "to" << sanitizedRedirectUrl;
                 requestUserPrincipalUrl(redirectUrl.toString());
             } else {
-                qWarning() << "ignoring possibly malicious redirect from" << originalUrl << "to" << redirectUrl;
+                qWarning() << "ignoring possibly malicious redirect from" << originalUrl << "to" << sanitizedRedirectUrl;
                 emitError(CurrentUserPrincipalNotFoundError);
             }
         } else {
@@ -611,7 +614,8 @@ void CalDAVDiscovery::handleSslErrors(const QList<QSslError> &errors)
 
 void CalDAVDiscovery::emitNetworkReplyError(const QNetworkReply &reply)
 {
-    qWarning() << QString("QNetworkReply error: %1: %2").arg(reply.error()).arg(reply.errorString());
+    const int httpCode = reply.attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    qDebug() << QString("QNetworkReply error: %1 with HTTP code: %2").arg(reply.error()).arg(httpCode);
 
     switch (reply.error()) {
     case QNetworkReply::AuthenticationRequiredError:
