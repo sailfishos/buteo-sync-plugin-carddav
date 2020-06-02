@@ -370,9 +370,10 @@ void CardDavVCardConverter::contactProcessed(const QContact &c, QVersitDocument 
                 // then just assume that the display label is a useful first name.
                 name.setFirstName(displaylabel);
             }
-            QString nvalue = QStringLiteral("%1;%2;;;").arg(name.lastName(), name.firstName());
+            static const QStringList nvalue = { "", "", "", "", "" };
             QVersitProperty nProp;
             nProp.setName("N");
+            nProp.setValueType(QVersitProperty::CompoundType);
             nProp.setValue(nvalue);
             d->addProperty(nProp);
         }
