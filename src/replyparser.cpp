@@ -33,6 +33,8 @@
 #include <QRegularExpression>
 
 #include <QContactGuid>
+#include <QContactSyncTarget>
+#include <QContactExtendedDetail>
 
 namespace {
     void debugDumpData(const QString &data)
@@ -441,7 +443,10 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
     return infos;
 }
 
-QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, QString *newSyncToken) const
+QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(
+        const QByteArray &syncTokenDeltaResponse,
+        const QString &addressbookUrl,
+        QString *newSyncToken) const
 {
     /* We expect a response of the form:
         <?xml version="1.0" encoding="utf-8" ?>
@@ -495,15 +500,9 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QB
         ReplyParser::ContactInformation currInfo;
         currInfo.uri = QUrl::fromPercentEncoding(rmap.value("href").toMap().value("@text").toString().toUtf8());
         currInfo.etag = rmap.value("propstat").toMap().value("prop").toMap().value("getetag").toMap().value("@text").toString();
-        QMap<QString, QString>::const_iterator it = q->m_contactUris.constBegin();
-        for ( ; it != q->m_contactUris.constEnd(); ++it) {
-            if (it.value() == currInfo.uri) {
-                currInfo.guid = it.key();
-            }
-        }
-        QString status = rmap.value("propstat").toMap().value("status").toMap().value("@text").toString();
+        QString status = rmap.value("status").toMap().value("@text").toString();
         if (status.isEmpty()) {
-            status = rmap.value("status").toMap().value("@text").toString();
+            status = rmap.value("propstat").toMap().value("status").toMap().value("@text").toString();
         }
         if (status.contains(QLatin1String("200 OK"))) {
             if (currInfo.uri.endsWith(QChar('/'))) {
@@ -520,9 +519,10 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QB
                 LOG_DEBUG(Q_FUNC_INFO << "ignoring non-contact resource:" << currInfo.uri << currInfo.etag << status);
                 continue;
             }
-            currInfo.modType = currInfo.guid.isEmpty()
-                             ? ReplyParser::ContactInformation::Addition
-                             : ReplyParser::ContactInformation::Modification;
+            const QString oldEtag = q->m_localContactUrisEtags[addressbookUrl].value(currInfo.uri);
+            currInfo.modType = oldEtag.isEmpty() ? ReplyParser::ContactInformation::Addition
+                             : (currInfo.etag != oldEtag) ? ReplyParser::ContactInformation::Modification
+                             : ReplyParser::ContactInformation::Unmodified;
         } else if (status.contains(QLatin1String("404 Not Found"))) {
             currInfo.modType = ReplyParser::ContactInformation::Deletion;
         } else {
@@ -538,7 +538,10 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(const QB
     return info;
 }
 
-QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(const QByteArray &contactMetadataResponse, const QString &addressbookUrl) const
+QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(
+        const QByteArray &contactMetadataResponse,
+        const QString &addressbookUrl,
+        const QHash<QString, QString> &contactUriToEtag) const
 {
     /* We expect a response of the form:
         HTTP/1.1 207 Multi-status
@@ -606,29 +609,24 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(const Q
             continue;
         }
 
-        QMap<QString, QString>::const_iterator it = q->m_contactUris.constBegin();
-        for ( ; it != q->m_contactUris.constEnd(); ++it) {
-            if (it.value() == currInfo.uri) {
-                currInfo.guid = it.key();
-            }
-        }
         if (status.contains(QLatin1String("200 OK"))) {
             seenUris.insert(currInfo.uri);
-            currInfo.modType = currInfo.guid.isEmpty()
-                             ? ReplyParser::ContactInformation::Addition
-                             : ReplyParser::ContactInformation::Modification;
             // only append if it's an addition or an actual modification
             // the etag will have changed since the last time we saw it,
             // if the contact has been modified server-side since last sync.
-            if (currInfo.modType == ReplyParser::ContactInformation::Addition) {
-                LOG_TRACE("Resource" << currInfo.uri << "was added on server with etag" << currInfo.etag);
+            if (!contactUriToEtag.contains(currInfo.uri)) {
+                LOG_TRACE("Resource" << currInfo.uri << "was added on server with etag" << currInfo.etag << "to addressbook:" << addressbookUrl);
+                currInfo.modType = ReplyParser::ContactInformation::Addition;
                 info.append(currInfo);
-            } else if (q->m_contactEtags[currInfo.guid] != currInfo.etag) {
-                LOG_TRACE("Resource" << currInfo.uri << "with guid" << currInfo.guid << "was modified on server.");
-                LOG_TRACE("Old etag:" << q->m_contactEtags[currInfo.guid] << "New etag:" << currInfo.etag);
+            } else if (contactUriToEtag[currInfo.uri] != currInfo.etag) {
+                LOG_TRACE("Resource" << currInfo.uri << "was modified on server in addressbook:" << addressbookUrl);
+                LOG_TRACE("Old etag:" << contactUriToEtag[currInfo.uri] << "New etag:" << currInfo.etag);
+                currInfo.modType = ReplyParser::ContactInformation::Modification;
                 info.append(currInfo);
             } else {
-                LOG_TRACE("Resource" << currInfo.uri << "with guid" << currInfo.guid << "is unchanged since last sync with etag" << currInfo.etag);
+                LOG_TRACE("Resource" << currInfo.uri << "is unchanged since last sync with etag" << currInfo.etag << "in addressbook:" << addressbookUrl);
+                currInfo.modType = ReplyParser::ContactInformation::Unmodified;
+                info.append(currInfo);
             }
         } else {
             LOG_WARNING(Q_FUNC_INFO << "unknown response:" << currInfo.uri << currInfo.etag << status);
@@ -636,16 +634,13 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(const Q
     }
 
     // we now need to determine deletions.
-    QStringList contactGuidsInAddressbook = q->m_addressbookContactGuids[addressbookUrl];
-    Q_FOREACH (const QString &guid, contactGuidsInAddressbook) {
-        const QString &uri = q->m_contactUris[guid];
+    for (const QString &uri : contactUriToEtag.keys()) {
         if (!seenUris.contains(uri)) {
             // this uri wasn't listed in the report, so this contact must have been deleted.
-            LOG_TRACE("Resource" << uri << "with guid" << guid << "was deleted on server");
+            LOG_TRACE("Resource" << uri << "was deleted on server in addressbook:" << addressbookUrl);
             ReplyParser::ContactInformation currInfo;
-            currInfo.etag = q->m_contactEtags[guid];
+            currInfo.etag = contactUriToEtag.value(uri);
             currInfo.uri = uri;
-            currInfo.guid = guid;
             currInfo.modType = ReplyParser::ContactInformation::Deletion;
             info.append(currInfo);
         }
@@ -654,7 +649,7 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(const Q
     return info;
 }
 
-QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const
+QHash<QString, QContact> ReplyParser::parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const
 {
     /* We expect a response of the form:
         HTTP/1.1 207 Multi-status
@@ -695,24 +690,18 @@ QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData
     */
     debugDumpData(QString::fromUtf8(contactData));
     QXmlStreamReader reader(contactData);
-    QVariantMap vmap = xmlToVMap(reader);
-    QVariantMap multistatusMap = vmap[QLatin1String("multistatus")].toMap();
-    QVariantList responses;
-    if (multistatusMap[QLatin1String("response")].type() == QVariant::List) {
-        // multiple updates in the delta.
-        responses = multistatusMap[QLatin1String("response")].toList();
-    } else {
-        // only one update in the delta.
-        QVariantMap response = multistatusMap[QLatin1String("response")].toMap();
-        responses << response;
-    }
+    const QVariantMap vmap = xmlToVMap(reader);
+    const QVariantMap multistatusMap = vmap[QLatin1String("multistatus")].toMap();
+    const QVariantList responses = (multistatusMap[QLatin1String("response")].type() == QVariant::List)
+                                 ? multistatusMap[QLatin1String("response")].toList()
+                                 : (QVariantList() << multistatusMap[QLatin1String("response")].toMap());
 
-    QMap<QString, ReplyParser::FullContactInformation> uriToContactData;
-    Q_FOREACH (const QVariant &rv, responses) {
-        QVariantMap rmap = rv.toMap();
-        QString uri = QUrl::fromPercentEncoding(rmap.value("href").toMap().value("@text").toString().toUtf8());
-        QString etag = rmap.value("propstat").toMap().value("prop").toMap().value("getetag").toMap().value("@text").toString();
-        QString vcard = rmap.value("propstat").toMap().value("prop").toMap().value("address-data").toMap().value("@text").toString();
+    QHash<QString, QContact> uriToContactData;
+    for (const QVariant &rv : responses) {
+        const QVariantMap rmap = rv.toMap();
+        const QString uri = QUrl::fromPercentEncoding(rmap.value("href").toMap().value("@text").toString().toUtf8());
+        const QString etag = rmap.value("propstat").toMap().value("prop").toMap().value("getetag").toMap().value("@text").toString();
+        const QString vcard = rmap.value("propstat").toMap().value("prop").toMap().value("address-data").toMap().value("@text").toString();
 
         // import the data as a vCard
         bool ok = true;
@@ -721,62 +710,53 @@ QMap<QString, ReplyParser::FullContactInformation> ReplyParser::parseContactData
             continue;
         }
 
-        // fix up various details of the contact.
+        // fix up the GUID of the contact if required.
         QContact importedContact = result.first;
         QContactGuid guid = importedContact.detail<QContactGuid>();
-        QString uid = guid.guid(); // at this stage it's a UID.
+        const QString uid = guid.guid();
         if (uid.isEmpty()) {
             LOG_WARNING(Q_FUNC_INFO << "contact import from vcard has no UID:\n" << vcard);
             continue;
         }
-        bool found = false;
-        QString migrateGuid;
-        QMap<QString,QString>::const_iterator it = q->m_contactUids.constBegin();
-        for ( ; it != q->m_contactUids.constEnd(); ++it) {
-            // see if the UID exists in our map already
-            if (it.value() == uid) {
-                // check to make sure that it's from the same addressbook by inspecting the guid prefix
-                if (it.key().startsWith(QStringLiteral("%1:AB:%2:").arg(QString::number(q->m_accountId), addressbookUrl))) {
-                    // found existing; use the local-device GUID instead.
-                    LOG_DEBUG("Found identical UID:" << uid << "from this addressbook, guid:" << it.key() << "- using.");
-                    guid.setGuid(it.key());
-                    found = true;
-                    break;
-                } else if (it.key().startsWith(QStringLiteral("%1:AB:").arg(q->m_accountId))) {
-                    // this is a contact with a duplicate UID but from a different addressbook
-                    LOG_DEBUG("Found identical UID:" << uid << "from different addressbook, guid:" << it.key() << "- ignoring.");
-                } else if (it.key().startsWith(QStringLiteral("%1:").arg(q->m_accountId))) {
-                    // this is a contact with a duplicate UID and we don't know which addresbook it's from.
-                    // this can only occur due to package upgrade (i.e., previously we didn't support duplicated UIDs at all).
-                    // in this case we can assume that this UID does identify this contact since otherwise sync would have failed due to duplicates.
-                    LOG_DEBUG("Found identical UID:" << uid << "from unknown addressbook due to old guid format, guid:" << it.key() << "- migrating.");
-                    migrateGuid = it.key();
-                    found = true;
-                    break;
-                }
+        if (!uid.startsWith(QStringLiteral("%1:AB:%2:").arg(QString::number(q->m_accountId), addressbookUrl))) {
+            // prefix the UID with accountId and addressbook URI to avoid duplicated GUID issue.
+            // RFC6352 only requires that the UID be unique within a single collection (addressbook).
+            // So, we set the guid to be a compound of the accountId, addressbook URI and the UID.
+            guid.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid));
+            importedContact.saveDetail(&guid, QContact::IgnoreAccessConstraints);
+        }
+
+        // store the sync target of the contact
+        QContactSyncTarget syncTarget = importedContact.detail<QContactSyncTarget>();
+        syncTarget.setSyncTarget(uri);
+        importedContact.saveDetail(&syncTarget, QContact::IgnoreAccessConstraints);
+
+        // store the etag into the contact
+        QContactExtendedDetail etagDetail;
+        for (const QContactExtendedDetail &ed : importedContact.details<QContactExtendedDetail>()) {
+            if (ed.name() == KEY_ETAG) {
+                etagDetail = ed;
+                break;
             }
         }
-        if (!found) {
-            // this is a server addition.  mutate the uid into a per-account and per-addresbook device guid.
-            // RFC6352 only requires that the UID be unique within a single collection (addressbook).
-            // So, we set the guid to be a compound of the addressbook URI and the UID.
-            guid.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid));
-            // also set the guid to uid mapping for the server-side addition.
-            q->m_contactUids.insert(guid.guid(), uid);
-            LOG_DEBUG("Parsed pure server-addition with guid:" << guid.guid());
-        } else if (!migrateGuid.isEmpty()) {
-            QString newguid = QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid);
-            q->migrateGuidData(migrateGuid, newguid, addressbookUrl); // migrate all state data for the old guid to the new one.
-            guid.setGuid(newguid);
+        etagDetail.setName(KEY_ETAG);
+        etagDetail.setData(etag);
+        importedContact.saveDetail(&etagDetail, QContact::IgnoreAccessConstraints);
+
+        // store unsupported properties into the contact.
+        QContactExtendedDetail unsupportedPropertiesDetail;
+        for (const QContactExtendedDetail &ed : importedContact.details<QContactExtendedDetail>()) {
+            if (ed.name() == KEY_UNSUPPORTEDPROPERTIES) {
+                unsupportedPropertiesDetail = ed;
+                break;
+            }
         }
-        importedContact.saveDetail(&guid);
+        unsupportedPropertiesDetail.setName(KEY_UNSUPPORTEDPROPERTIES);
+        unsupportedPropertiesDetail.setData(result.second);
+        importedContact.saveDetail(&unsupportedPropertiesDetail, QContact::IgnoreAccessConstraints);
 
         // and insert into the return map.
-        ReplyParser::FullContactInformation fci;
-        fci.contact = importedContact;
-        fci.unsupportedProperties = result.second;
-        fci.etag = etag;
-        uriToContactData.insert(uri, fci);
+        uriToContactData.insert(uri, importedContact);
     }
 
     return uriToContactData;

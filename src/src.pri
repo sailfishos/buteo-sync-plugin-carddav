@@ -15,6 +15,11 @@ packagesExist(contactcache-qt5) {
     DEFINES += USE_LIBCONTACTS
 }
 
+# We need the moc output for the headers from sqlite-extensions
+extensionsIncludePath = $$system(pkg-config --cflags-only-I qtcontacts-sqlite-qt5-extensions)
+VPATH += $$replace(extensionsIncludePath, -I, )
+HEADERS += qcontactclearchangeflagsrequest.h contactmanagerengine.h
+
 INCLUDEPATH += $$PWD
 
 SOURCES += \
@@ -26,6 +31,7 @@ SOURCES += \
     $$PWD/replyparser.cpp
 
 HEADERS += \
+    $$EXTENSION_HEADERS \
     $$PWD/carddavclient.h \
     $$PWD/syncer_p.h \
     $$PWD/auth_p.h \

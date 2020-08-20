@@ -32,6 +32,8 @@
 
 #include "worker.h"
 
+#include <qtcontacts-extensions.h>
+
 #include <QtDebug>
 
 namespace {
@@ -429,7 +431,7 @@ void CDavToolWorker::gotCredentials(const SignOn::SessionData &response)
             return;
         }
 
-        QStringList calendarPaths = m_account->value(QStringLiteral("calendars")).toStringList();
+        const QStringList calendarPaths = m_account->value(QStringLiteral("calendars")).toStringList();
         gotCollectionsList(calendarPaths);
     } else if (m_operationMode == CDavToolWorker::ClearAllRemoteAddressbooks) {
         if (m_carddavService.name().isEmpty()) {
@@ -444,14 +446,20 @@ void CDavToolWorker::gotCredentials(const SignOn::SessionData &response)
             return;
         }
 
-        m_carddavSyncer = new Syncer(this, Q_NULLPTR);
+        m_carddavSyncer = new Syncer(this, Q_NULLPTR, m_account->id());
         m_carddavDiscovery = new CardDav(m_carddavSyncer,
                                          m_hostAddress,
                                          m_addressbookPath,
                                          m_username,
                                          m_password);
         connect(m_carddavDiscovery, &CardDav::addressbooksList,
-                this, &CDavToolWorker::gotCollectionsList);
+                this, [this] (const QList<ReplyParser::AddressBookInformation> &addressbooks) {
+            QStringList paths;
+            for (const ReplyParser::AddressBookInformation &ab : addressbooks) {
+                paths.append(ab.url);
+            }
+            this->gotCollectionsList(paths);
+        });
         connect(m_carddavDiscovery, &CardDav::error,
                 this, &CDavToolWorker::handleCardDAVError);
         m_carddavDiscovery->determineAddressbooksList();

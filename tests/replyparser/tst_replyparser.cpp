@@ -12,15 +12,20 @@
 #include <QContactName>
 #include <QContactPhoneNumber>
 #include <QContactGuid>
+#include <QContactSyncTarget>
 #include <QContactGender>
 #include <QContactBirthday>
 #include <QContactTimestamp>
+#include <QContactExtendedDetail>
 #include <qtcontacts-extensions.h>
 
 QTCONTACTS_USE_NAMESPACE
 
-typedef QMap<QString, QString> QMapStringString;
-typedef QMap<QString, ReplyParser::FullContactInformation> QMapStringFullContactInfo;
+typedef QSet<QString> QSetString;
+typedef QHash<QString, QString> QHashStringString;
+typedef QHash<QString, QContact> QHashStringContact;
+
+Q_DECLARE_METATYPE(QHashStringContact);
 
 namespace {
 
@@ -65,7 +70,7 @@ class tst_replyparser : public QObject
 
 public:
     tst_replyparser()
-        : m_s(Q_NULLPTR, Q_NULLPTR)
+        : m_s(Q_NULLPTR, Q_NULLPTR, 7357)
         , m_rp(&m_s, &m_vcc) {}
 
 public slots:
@@ -278,14 +283,14 @@ void tst_replyparser::parseAddressbookInformation()
 void tst_replyparser::parseSyncTokenDelta_data()
 {
     QTest::addColumn<QString>("xmlFilename");
-    QTest::addColumn<QMapStringString>("injectContactUris");
+    QTest::addColumn<QHashStringString>("injectContactUrisEtags");
     QTest::addColumn<QString>("expectedNewSyncToken");
     QTest::addColumn<QList<ReplyParser::ContactInformation> >("expectedContactInformation");
 
     QList<ReplyParser::ContactInformation> infos;
     QTest::newRow("empty sync token delta response")
         << QStringLiteral("data/replyparser_synctokendelta_empty.xml")
-        << QMap<QString, QString>()
+        << QHash<QString, QString>()
         << QString()
         << infos;
 
@@ -293,12 +298,11 @@ void tst_replyparser::parseSyncTokenDelta_data()
     ReplyParser::ContactInformation c1;
     c1.modType = ReplyParser::ContactInformation::Addition;
     c1.uri = QStringLiteral("/addressbooks/johndoe/contacts/newcard.vcf");
-    c1.guid = QString();
     c1.etag = QStringLiteral("\"33441-34321\"");
     infos << c1;
     QTest::newRow("single contact addition in well-formed sync token delta response")
         << QStringLiteral("data/replyparser_synctokendelta_single-well-formed-addition.xml")
-        << QMap<QString, QString>()
+        << QHash<QString, QString>()
         << QString()
         << infos;
 
@@ -306,20 +310,18 @@ void tst_replyparser::parseSyncTokenDelta_data()
     ReplyParser::ContactInformation c2;
     c2.modType = ReplyParser::ContactInformation::Modification;
     c2.uri = QStringLiteral("/addressbooks/johndoe/contacts/updatedcard.vcf");
-    c2.guid = QStringLiteral("updatedcard_guid");
     c2.etag = QStringLiteral("\"33541-34696\"");
     ReplyParser::ContactInformation c3;
     c3.modType = ReplyParser::ContactInformation::Deletion;
     c3.uri = QStringLiteral("/addressbooks/johndoe/contacts/deletedcard.vcf");
-    c3.guid = QStringLiteral("deletedcard_guid");
     c3.etag = QString();
     infos << c1 << c2 << c3;
-    QMap<QString, QString> mContactUris;
-    mContactUris.insert(c2.guid, c2.uri);
-    mContactUris.insert(c3.guid, c3.uri);
+    QHash<QString, QString> mContactUrisEtags;
+    mContactUrisEtags.insert(c2.uri, QStringLiteral("\"0001-0001\"")); // some previous etag.
+    mContactUrisEtags.insert(c3.uri, c3.etag);
     QTest::newRow("single contact addition + modification + removal in well-formed sync token delta response")
         << QStringLiteral("data/replyparser_synctokendelta_single-well-formed-add-mod-rem.xml")
-        << mContactUris
+        << mContactUrisEtags
         << QStringLiteral("http://sabredav.org/ns/sync/5001")
         << infos;
 }
@@ -328,14 +330,13 @@ bool operator==(const ReplyParser::ContactInformation& first, const ReplyParser:
 {
     return first.modType == second.modType
         && first.uri == second.uri
-        && first.guid == second.guid
         && first.etag == second.etag;
 }
 
 void tst_replyparser::parseSyncTokenDelta()
 {
     QFETCH(QString, xmlFilename);
-    QFETCH(QMapStringString, injectContactUris);
+    QFETCH(QHashStringString, injectContactUrisEtags);
     QFETCH(QString, expectedNewSyncToken);
     QFETCH(QList<ReplyParser::ContactInformation>, expectedContactInformation);
 
@@ -344,11 +345,12 @@ void tst_replyparser::parseSyncTokenDelta()
         QFAIL("Data file does not exist or cannot be opened for reading!");
     }
 
-    m_s.m_contactUris = injectContactUris;
+    const QString addressbookUrl = QStringLiteral("test/addressbook/path");
+    m_s.m_localContactUrisEtags.insert(addressbookUrl, injectContactUrisEtags);
 
     QString newSyncToken;
     QByteArray syncTokenDeltaResponse = f.readAll();
-    QList<ReplyParser::ContactInformation> contactInfo = m_rp.parseSyncTokenDelta(syncTokenDeltaResponse, &newSyncToken);
+    QList<ReplyParser::ContactInformation> contactInfo = m_rp.parseSyncTokenDelta(syncTokenDeltaResponse, addressbookUrl, &newSyncToken);
 
     QCOMPARE(newSyncToken, expectedNewSyncToken);
     QCOMPARE(contactInfo.size(), expectedContactInformation.size());
@@ -358,92 +360,75 @@ void tst_replyparser::parseSyncTokenDelta()
                 qWarning() << "  actual:"
                            << contactInfo[i].modType
                            << contactInfo[i].uri
-                           << contactInfo[i].guid
                            << contactInfo[i].etag;
                 qWarning() << "expected:"
                            << expectedContactInformation[i].modType
                            << expectedContactInformation[i].uri
-                           << expectedContactInformation[i].guid
                            << expectedContactInformation[i].etag;
             }
         }
         QFAIL("contact information different");
     }
 
-    m_s.m_contactUris.clear();
+    m_s.m_localContactUrisEtags.clear();
 }
 
 void tst_replyparser::parseContactMetadata_data()
 {
     QTest::addColumn<QString>("xmlFilename");
     QTest::addColumn<QString>("addressbookUrl");
-    QTest::addColumn<QMapStringString>("injectContactUris");
-    QTest::addColumn<QMapStringString>("injectContactEtags");
+    QTest::addColumn<QHashStringString>("injectContactEtags");
     QTest::addColumn<QList<ReplyParser::ContactInformation> >("expectedContactInformation");
 
     QList<ReplyParser::ContactInformation> infos;
     QTest::newRow("empty contact metadata response")
         << QStringLiteral("data/replyparser_contactmetadata_empty.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
-        << QMap<QString, QString>()
+        << QHash<QString, QString>()
         << infos;
 
     infos.clear();
     ReplyParser::ContactInformation c1;
     c1.modType = ReplyParser::ContactInformation::Addition;
     c1.uri = QStringLiteral("/addressbooks/johndoe/contacts/newcard.vcf");
-    c1.guid = QString();
     c1.etag = QStringLiteral("\"0001-0001\"");
     ReplyParser::ContactInformation c2;
     c2.modType = ReplyParser::ContactInformation::Modification;
     c2.uri = QStringLiteral("/addressbooks/johndoe/contacts/updatedcard.vcf");
-    c2.guid = QStringLiteral("updatedcard_guid");
     c2.etag = QStringLiteral("\"0002-0002\"");
     ReplyParser::ContactInformation c3;
     c3.modType = ReplyParser::ContactInformation::Deletion;
     c3.uri = QStringLiteral("/addressbooks/johndoe/contacts/deletedcard.vcf");
-    c3.guid = QStringLiteral("deletedcard_guid");
     c3.etag = QStringLiteral("\"0003-0001\"");
     ReplyParser::ContactInformation c4;
-    c4.modType = ReplyParser::ContactInformation::Uninitialized;
+    c4.modType = ReplyParser::ContactInformation::Unmodified;
     c4.uri = QStringLiteral("/addressbooks/johndoe/contacts/unchangedcard.vcf");
-    c4.guid = QStringLiteral("unchangedcard_guid");
     c4.etag = QStringLiteral("\"0004-0001\"");
-    infos << c1 << c2 << c3; // but not c4, it's unchanged.
-    QMap<QString, QString> mContactUris;
-    mContactUris.insert(c2.guid, c2.uri);
-    mContactUris.insert(c3.guid, c3.uri);
-    mContactUris.insert(c4.guid, c4.uri);
-    QMap<QString, QString> mContactEtags;
-    mContactEtags.insert(c2.guid, QStringLiteral("\"0002-0001\"")); // changed to 0002-0002
-    mContactEtags.insert(c3.guid, QStringLiteral("\"0003-0001\"")); // unchanged but deleted
-    mContactEtags.insert(c4.guid, QStringLiteral("\"0004-0001\"")); // unchanged.
+    infos << c1 << c2 << c4 << c3;
+    QHash<QString, QString> mContactEtags;
+    mContactEtags.insert(c2.uri, QStringLiteral("\"0002-0001\"")); // changed to 0002-0002
+    mContactEtags.insert(c3.uri, QStringLiteral("\"0003-0001\"")); // unchanged but deleted
+    mContactEtags.insert(c4.uri, QStringLiteral("\"0004-0001\"")); // unchanged.
     QTest::newRow("single contact addition + modification + removal + unchanged in well-formed sync token delta response")
         << QStringLiteral("data/replyparser_contactmetadata_single-well-formed-add-mod-rem-unch.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << mContactUris
         << mContactEtags
         << infos;
 
     infos.clear();
-    mContactUris.clear();
     mContactEtags.clear();
     ReplyParser::ContactInformation c5;
     c5.modType = ReplyParser::ContactInformation::Addition;
     c5.uri = QStringLiteral("/addressbooks/johndoe/contacts/new.vcf");
-    c5.guid = QString();
     c5.etag = QStringLiteral("\"0021-0021\"");
     ReplyParser::ContactInformation c6;
     c6.modType = ReplyParser::ContactInformation::Addition;
     c6.uri = QStringLiteral("/addressbooks/johndoe/contacts/alsonew");
-    c6.guid = QString();
     c6.etag = QStringLiteral("\"0022-0022\"");
     infos << c5 << c6;
         QTest::newRow("two contact additions with vcf and non-vcf extenions in well-formed sync token delta response")
         << QStringLiteral("data/replyparser_contactmetadata_single-vcf-and-non-vcf.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << mContactUris
         << mContactEtags
         << infos;
 }
@@ -452,8 +437,7 @@ void tst_replyparser::parseContactMetadata()
 {
     QFETCH(QString, xmlFilename);
     QFETCH(QString, addressbookUrl);
-    QFETCH(QMapStringString, injectContactUris);
-    QFETCH(QMapStringString, injectContactEtags);
+    QFETCH(QHashStringString, injectContactEtags);
     QFETCH(QList<ReplyParser::ContactInformation>, expectedContactInformation);
 
     QFile f(QStringLiteral("%1/%2").arg(QCoreApplication::applicationDirPath(), xmlFilename));
@@ -461,32 +445,26 @@ void tst_replyparser::parseContactMetadata()
         QFAIL("Data file does not exist or cannot be opened for reading!");
     }
 
-    m_s.m_contactUris = injectContactUris;
-    m_s.m_contactEtags = injectContactEtags;
-    m_s.m_addressbookContactGuids[addressbookUrl] = injectContactUris.keys();
+    m_s.m_localContactUrisEtags.insert(addressbookUrl, injectContactEtags);
 
     QByteArray contactMetadataResponse = f.readAll();
-    QList<ReplyParser::ContactInformation> contactInfo = m_rp.parseContactMetadata(contactMetadataResponse, addressbookUrl);
+    QList<ReplyParser::ContactInformation> contactInfo = m_rp.parseContactMetadata(contactMetadataResponse, addressbookUrl, injectContactEtags);
 
     QCOMPARE(contactInfo, expectedContactInformation);
 
-    m_s.m_addressbookContactGuids.clear();
-    m_s.m_contactEtags.clear();
-    m_s.m_contactUris.clear();
+    m_s.m_localContactUrisEtags.clear();
 }
 
 void tst_replyparser::parseContactData_data()
 {
     QTest::addColumn<QString>("xmlFilename");
     QTest::addColumn<QString>("addressbookUrl");
-    QTest::addColumn<QMapStringString>("injectContactUids");
-    QTest::addColumn<QMapStringFullContactInfo>("expectedContactInformation");
+    QTest::addColumn<QHashStringContact>("expectedContactInformation");
 
-    QMap<QString, ReplyParser::FullContactInformation> infos;
+    QHash<QString, QContact> infos;
     QTest::newRow("empty contact data response")
         << QStringLiteral("data/replyparser_contactdata_empty.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
 
     infos.clear();
@@ -502,178 +480,139 @@ void tst_replyparser::parseContactData_data()
     cp.setSubTypes(QList<int>() << QContactPhoneNumber::SubTypeMobile);
     QContactGuid cg;
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357), QStringLiteral("/addressbooks/johndoe/contacts/"), QStringLiteral("testy-testperson-uid")));
+    QContactSyncTarget cs;
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson.vcf"));
+    QContactExtendedDetail ce;
+    ce.setName(KEY_ETAG);
+    ce.setData(QStringLiteral("\"0001-0001\""));
+    QContactExtendedDetail cu;
+    cu.setName(KEY_UNSUPPORTEDPROPERTIES);
+    cu.setData(QStringList() << QStringLiteral("X-UNSUPPORTED-TEST-PROPERTY:7357"));
     contact.saveDetail(&cd);
     contact.saveDetail(&cn);
     contact.saveDetail(&cp);
     contact.saveDetail(&cg);
-    ReplyParser::FullContactInformation c1;
-    c1.contact = contact;
-    c1.unsupportedProperties = QStringList() << QStringLiteral("X-UNSUPPORTED-TEST-PROPERTY:7357");
-    c1.etag = QStringLiteral("\"0001-0001\"");
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson.vcf"), c1);
-    //QMap<QString, QString> mContactUids;
-    //mContactUids.insert(cg.guid(), QStringLiteral("testy-testperson-uid"));
+    contact.saveDetail(&cs);
+    contact.saveDetail(&ce);
+    contact.saveDetail(&cu);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson.vcf"), contact);
     QTest::newRow("single contact in well-formed contact data response")
         << QStringLiteral("data/replyparser_contactdata_single-well-formed.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
+
+    cu.setData(QStringList());
+    contact.saveDetail(&cu);
 
     QContactBirthday cb;
     cb.setDateTime(QDateTime(QDate(1990, 12, 31), QTime(2, 0, 0), Qt::UTC));
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
                                                  QStringLiteral("/addressbooks/johndoe/contacts/"),
                                                  QStringLiteral("testy-testperson-uid-2")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson2.vcf"));
+    contact.saveDetail(&cs);
     contact.saveDetail(&cg);
     contact.saveDetail(&cb);
-    ReplyParser::FullContactInformation c2;
-    c2.contact = contact;
-    c2.etag = QStringLiteral("\"0001-0001\"");
     infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson2.vcf"), c2);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson2.vcf"), contact);
     QTest::newRow("single contact with fully-specified, hyphen-separated UTC ISO8601 BDAY")
         << QStringLiteral("data/replyparser_contactdata_single-hs-utc-iso8601-bday.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
 
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
                                                  QStringLiteral("/addressbooks/johndoe/contacts/"),
                                                  QStringLiteral("testy-testperson-uid-3")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson3.vcf"));
+    contact.saveDetail(&cs);
     contact.saveDetail(&cg);
-    ReplyParser::FullContactInformation c3;
-    c3.contact = contact;
-    c3.etag = QStringLiteral("\"0001-0001\"");
     infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson3.vcf"), c3);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson3.vcf"), contact);
     QTest::newRow("single contact with fully-specified, non-separated UTC ISO8601 BDAY")
         << QStringLiteral("data/replyparser_contactdata_single-ns-utc-iso8601-bday.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
 
     cb.setDateTime(QDateTime(QDate(1990, 12, 31), QTime(2, 0, 0), Qt::LocalTime));
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
                                                  QStringLiteral("/addressbooks/johndoe/contacts/"),
                                                  QStringLiteral("testy-testperson-uid-4")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson4.vcf"));
+    contact.saveDetail(&cs);
     contact.saveDetail(&cg);
     contact.saveDetail(&cb);
-    ReplyParser::FullContactInformation c4;
-    c4.contact = contact;
-    c4.etag = QStringLiteral("\"0001-0001\"");
     infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson4.vcf"), c4);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson4.vcf"), contact);
     QTest::newRow("single contact with fully-specified, hyphen-separated no-tz ISO8601 BDAY")
         << QStringLiteral("data/replyparser_contactdata_single-hs-notz-iso8601-bday.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
 
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
                                                  QStringLiteral("/addressbooks/johndoe/contacts/"),
                                                  QStringLiteral("testy-testperson-uid-5")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson5.vcf"));
+    contact.saveDetail(&cs);
     contact.saveDetail(&cg);
-    ReplyParser::FullContactInformation c5;
-    c5.contact = contact;
-    c5.etag = QStringLiteral("\"0001-0001\"");
     infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson5.vcf"), c5);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson5.vcf"), contact);
     QTest::newRow("single contact with fully-specified, non-separated no-tz ISO8601 BDAY")
         << QStringLiteral("data/replyparser_contactdata_single-ns-notz-iso8601-bday.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
 
     cb.setDate(QDate(1990, 12, 31));
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
                                                  QStringLiteral("/addressbooks/johndoe/contacts/"),
                                                  QStringLiteral("testy-testperson-uid-6")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson6.vcf"));
+    contact.saveDetail(&cs);
     contact.saveDetail(&cg);
     contact.saveDetail(&cb);
-    ReplyParser::FullContactInformation c6;
-    c6.contact = contact;
-    c6.etag = QStringLiteral("\"0001-0001\"");
     infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson6.vcf"), c6);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson6.vcf"), contact);
     QTest::newRow("single contact with non-separated, date-only ISO8601 BDAY")
         << QStringLiteral("data/replyparser_contactdata_single-ns-do-iso8601-bday.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
 
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
                                                  QStringLiteral("/addressbooks/johndoe/contacts/"),
                                                  QStringLiteral("testy-testperson-uid-7")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson7.vcf"));
+    contact.saveDetail(&cs);
     contact.saveDetail(&cg);
-    ReplyParser::FullContactInformation c7;
-    c7.contact = contact;
-    c7.etag = QStringLiteral("\"0001-0001\"");
     infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson7.vcf"), c7);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson7.vcf"), contact);
     QTest::newRow("single contact with multiple non-separated, date-only ISO8601 BDAY fields")
         << QStringLiteral("data/replyparser_contactdata_single-ns-do-iso8601-bday-multiple.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
 
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
                                                  QStringLiteral("/addressbooks/johndoe/contacts/"),
                                                  QStringLiteral("testy-testperson-uid-8")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson8.vcf"));
+    contact.saveDetail(&cs);
     contact.saveDetail(&cg);
-    ReplyParser::FullContactInformation c8;
-    c8.contact = contact;
-    c8.etag = QStringLiteral("\"0001-0001\"");
     infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson8.vcf"), c8);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson8.vcf"), contact);
     QTest::newRow("single contact with multiple FN fields")
         << QStringLiteral("data/replyparser_contactdata_single-contact-multiple-formattedname.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
 
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
                                                  QStringLiteral("/addressbooks/johndoe/contacts/"),
                                                  QStringLiteral("testy-testperson-uid-9")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson9.vcf"));
+    contact.saveDetail(&cs);
     contact.saveDetail(&cg);
-    ReplyParser::FullContactInformation c9;
-    c9.contact = contact;
-    c9.etag = QStringLiteral("\"0001-0001\"");
     infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson9.vcf"), c9);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson9.vcf"), contact);
     QTest::newRow("single contact with multiple N fields")
         << QStringLiteral("data/replyparser_contactdata_single-contact-multiple-name.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
-        << infos;
-
-    cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
-                                                 QStringLiteral("/addressbooks/johndoe/contacts/"),
-                                                 QStringLiteral("testy-testperson-uid-10")));
-    contact.saveDetail(&cg);
-    ReplyParser::FullContactInformation c10;
-    c10.contact = contact;
-    c10.etag = QStringLiteral("\"0001-0001\"");
-    infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson10.vcf"), c10);
-    QTest::newRow("single contact with multiple UID fields")
-        << QStringLiteral("data/replyparser_contactdata_single-contact-multiple-uid.xml")
-        << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
-        << infos;
-
-    cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
-                                                 QStringLiteral("/addressbooks/johndoe/contacts/"),
-                                                 QStringLiteral("testy-testperson-uid-11")));
-    contact.saveDetail(&cg);
-    ReplyParser::FullContactInformation c11;
-    c11.contact = contact;
-    c11.etag = QStringLiteral("\"0001-0001\"");
-    infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson11.vcf"), c11);
-    QTest::newRow("single contact with multiple REV fields")
-        << QStringLiteral("data/replyparser_contactdata_single-contact-multiple-rev.xml")
-        << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
         << infos;
 
     QContactGender cgender;
@@ -681,17 +620,46 @@ void tst_replyparser::parseContactData_data()
     cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
                                                  QStringLiteral("/addressbooks/johndoe/contacts/"),
                                                  QStringLiteral("testy-testperson-uid-12")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson12.vcf"));
+    contact.saveDetail(&cs);
     contact.saveDetail(&cg);
     contact.saveDetail(&cgender);
-    ReplyParser::FullContactInformation c12;
-    c12.contact = contact;
-    c12.etag = QStringLiteral("\"0001-0001\"");
     infos.clear();
-    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson12.vcf"), c12);
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson12.vcf"), contact);
     QTest::newRow("single contact with multiple X-GENDER fields")
         << QStringLiteral("data/replyparser_contactdata_single-contact-multiple-xgender.xml")
         << QStringLiteral("/addressbooks/johndoe/contacts/")
-        << QMap<QString, QString>()
+        << infos;
+
+    QContactTimestamp ct;
+    ct.setLastModified(QDateTime::fromString(QStringLiteral("1996-10-31T22:27:10Z"), Qt::ISODate));
+    cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
+                                                 QStringLiteral("/addressbooks/johndoe/contacts/"),
+                                                 QStringLiteral("testy-testperson-uid-11")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson11.vcf"));
+    contact.saveDetail(&cs);
+    contact.saveDetail(&cg);
+    contact.saveDetail(&ct);
+    infos.clear();
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson11.vcf"), contact);
+    QTest::newRow("single contact with multiple REV fields")
+        << QStringLiteral("data/replyparser_contactdata_single-contact-multiple-rev.xml")
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
+        << infos;
+
+    ct.setLastModified(QDateTime::fromString(QStringLiteral("1995-10-31T22:27:10Z"), Qt::ISODate));
+    cg.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(7357),
+                                                 QStringLiteral("/addressbooks/johndoe/contacts/"),
+                                                 QStringLiteral("testy-testperson-uid-10")));
+    cs.setSyncTarget(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson10.vcf"));
+    contact.saveDetail(&cs);
+    contact.saveDetail(&cg);
+    contact.saveDetail(&ct);
+    infos.clear();
+    infos.insert(QStringLiteral("/addressbooks/johndoe/contacts/testytestperson10.vcf"), contact);
+    QTest::newRow("single contact with multiple UID fields")
+        << QStringLiteral("data/replyparser_contactdata_single-contact-multiple-uid.xml")
+        << QStringLiteral("/addressbooks/johndoe/contacts/")
         << infos;
 }
 
@@ -702,54 +670,67 @@ bool operator==(const ReplyParser::FullContactInformation& first, const ReplyPar
         && first.contact == second.contact;
 }
 
+QContactExtendedDetail unsupportedPropertiesDetail(const QContact &contact)
+{
+    for (const QContactExtendedDetail &d : contact.details<QContactExtendedDetail>()) {
+        if (d.name() == KEY_UNSUPPORTEDPROPERTIES) {
+            return d;
+        }
+    }
+    return QContactExtendedDetail();
+}
+
+QContactExtendedDetail etagDetail(const QContact &contact)
+{
+    for (const QContactExtendedDetail &d : contact.details<QContactExtendedDetail>()) {
+        if (d.name() == KEY_ETAG) {
+            return d;
+        }
+    }
+    return QContactExtendedDetail();
+}
+
 void tst_replyparser::parseContactData()
 {
     QFETCH(QString, xmlFilename);
     QFETCH(QString, addressbookUrl);
-    QFETCH(QMapStringString, injectContactUids);
-    QFETCH(QMapStringFullContactInfo, expectedContactInformation);
+    QFETCH(QHashStringContact, expectedContactInformation);
 
     QFile f(QStringLiteral("%1/%2").arg(QCoreApplication::applicationDirPath(), xmlFilename));
     if (!f.exists() || !f.open(QIODevice::ReadOnly)) {
         QFAIL("Data file does not exist or cannot be opened for reading!");
     }
 
-    m_s.m_accountId = 7357;
-    m_s.m_contactUids = injectContactUids;
-
     QByteArray contactDataResponse = f.readAll();
-    QMap<QString, ReplyParser::FullContactInformation> contactInfo = m_rp.parseContactData(contactDataResponse, addressbookUrl);
+    QHash<QString, QContact> contactInfo = m_rp.parseContactData(contactDataResponse, addressbookUrl);
 
     QCOMPARE(contactInfo.size(), expectedContactInformation.size());
     QCOMPARE(contactInfo.keys(), expectedContactInformation.keys());
     Q_FOREACH (const QString &contactUri, contactInfo.keys()) {
-        QCOMPARE(contactInfo[contactUri].unsupportedProperties, expectedContactInformation[contactUri].unsupportedProperties);
-        QCOMPARE(contactInfo[contactUri].etag, expectedContactInformation[contactUri].etag);
-        QContact actualContact = removeIgnorableFields(contactInfo[contactUri].contact);
-        QContact expectedContact = removeIgnorableFields(expectedContactInformation[contactUri].contact);
-        bool contactsAreDifferent = m_s.significantDifferences(&actualContact, &expectedContact);
-        if (contactsAreDifferent) {
+        QCOMPARE(unsupportedPropertiesDetail(contactInfo[contactUri]).data(), unsupportedPropertiesDetail(expectedContactInformation[contactUri]).data());
+        QCOMPARE(etagDetail(contactInfo[contactUri]).data(), etagDetail(expectedContactInformation[contactUri]).data());
+        bool identical = false;
+        QContact actualContact = removeIgnorableFields(contactInfo[contactUri]);
+        QContact expectedContact = removeIgnorableFields(expectedContactInformation[contactUri]);
+        QContact resolved = m_s.resolveConflictingChanges(actualContact, expectedContact, &identical);
+        if (!identical) {
             qWarning() << "  actual:";
             dumpContact(actualContact);
+            qWarning() << " resolved:";
+            dumpContact(resolved);
             qWarning() << " expected:";
             dumpContact(expectedContact);
         }
-        QVERIFY(!contactsAreDifferent);
+        QVERIFY(identical);
 
         // explicitly test for multiples of unique details
-        QVERIFY(contactInfo[contactUri].contact.details<QContactTimestamp>().size() <= 1);
-        QVERIFY(contactInfo[contactUri].contact.details<QContactGender>().size() <= 1);
-        QVERIFY(contactInfo[contactUri].contact.details<QContactBirthday>().size() <= 1);
-        QVERIFY(contactInfo[contactUri].contact.details<QContactDisplayLabel>().size() <= 1);
-        QVERIFY(contactInfo[contactUri].contact.details<QContactName>().size() <= 1);
-        QVERIFY(contactInfo[contactUri].contact.details<QContactGuid>().size() <= 1);
+        QVERIFY(contactInfo[contactUri].details<QContactTimestamp>().size() <= 1);
+        QVERIFY(contactInfo[contactUri].details<QContactGender>().size() <= 1);
+        QVERIFY(contactInfo[contactUri].details<QContactBirthday>().size() <= 1);
+        QVERIFY(contactInfo[contactUri].details<QContactDisplayLabel>().size() <= 1);
+        QVERIFY(contactInfo[contactUri].details<QContactName>().size() <= 1);
+        QVERIFY(contactInfo[contactUri].details<QContactGuid>().size() <= 1);
     }
-
-    m_s.m_contactUids.clear();
-    m_s.m_accountId = 0;
-
-    // parseContactData() can call migrateGuidData() so we clear it here.
-    m_s.clearAllGuidData();
 }
 
 #include "tst_replyparser.moc"

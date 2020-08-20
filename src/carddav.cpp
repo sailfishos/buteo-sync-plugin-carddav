@@ -40,6 +40,8 @@
 #include <QContactBirthday>
 #include <QContactTimestamp>
 #include <QContactGender>
+#include <QContactSyncTarget>
+#include <QContactExtendedDetail>
 
 #include <QVersitWriter>
 #include <QVersitDocument>
@@ -76,6 +78,16 @@ namespace {
         if (!dbgout.isEmpty()) {
             LOG_DEBUG(dbgout);
         }
+    }
+
+    QContactId matchingContactFromList(const QContact &c, const QList<QContact> &contacts) {
+        const QString uri = c.detail<QContactSyncTarget>().syncTarget();
+        for (const QContact &other : contacts) {
+            if (!uri.isEmpty() && uri == other.detail<QContactSyncTarget>().syncTarget()) {
+                return other.id();
+            }
+        }
+        return QContactId();
     }
 }
 
@@ -163,8 +175,15 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
                 // duplicated REV field seen from vCard.
                 // remove this duplicate, else save will fail.
                 QContactTimestamp dupRev(d);
-                importedContact.removeDetail(&dupRev);
+                importedContact.removeDetail(&dupRev, QContact::IgnoreAccessConstraints);
                 LOG_DEBUG("Removed duplicate REV detail:" << dupRev);
+                QContactTimestamp firstRev = importedContact.detail<QContactTimestamp>();
+                if (dupRev.lastModified().isValid()
+                        && (!firstRev.lastModified().isValid()
+                            || dupRev.lastModified() > firstRev.lastModified())) {
+                    firstRev.setLastModified(dupRev.lastModified());
+                    importedContact.saveDetail(&firstRev, QContact::IgnoreAccessConstraints);
+                }
             } else {
                 seenUniqueDetailTypes.insert(QContactDetail::TypeTimestamp);
             }
@@ -195,11 +214,14 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
 #ifdef USE_LIBCONTACTS
         if (!displaylabelField.isEmpty()) {
             SeasideCache::decomposeDisplayLabel(displaylabelField, &nameDetail);
-            importedContact.saveDetail(&nameDetail);
+            if (nameDetail.isEmpty()) {
+                nameDetail.setCustomLabel(displaylabelField);
+            }
+            importedContact.saveDetail(&nameDetail, QContact::IgnoreAccessConstraints);
             LOG_DEBUG("Decomposed vCard display name into structured name:" << nameDetail);
         } else if (!nicknameField.isEmpty()) {
             SeasideCache::decomposeDisplayLabel(nicknameField, &nameDetail);
-            importedContact.saveDetail(&nameDetail);
+            importedContact.saveDetail(&nameDetail, QContact::IgnoreAccessConstraints);
             LOG_DEBUG("Decomposed vCard nickname into structured name:" << nameDetail);
         } else {
             LOG_WARNING("No structured name data exists in the vCard, contact will be unnamed!");
@@ -212,7 +234,7 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
     // mark each detail of the contact as modifiable
     Q_FOREACH (QContactDetail det, importedContact.details()) {
         det.setValue(QContactDetail__FieldModifiable, true);
-        importedContact.saveDetail(&det);
+        importedContact.saveDetail(&det, QContact::IgnoreAccessConstraints);
     }
 
     *ok = true;
@@ -414,8 +436,6 @@ CardDav::CardDav(Syncer *parent,
     , m_discoveryStage(CardDav::DiscoveryStarted)
     , m_addressbooksListOnly(false)
     , m_triedAddressbookPathAsHomeSetUrl(false)
-    , m_downsyncRequests(0)
-    , m_upsyncRequests(0)
 {
 }
 
@@ -432,8 +452,6 @@ CardDav::CardDav(Syncer *parent,
     , m_addressbookPath(addressbookPath)
     , m_discoveryStage(CardDav::DiscoveryStarted)
     , m_addressbooksListOnly(false)
-    , m_downsyncRequests(0)
-    , m_upsyncRequests(0)
 {
 }
 
@@ -544,7 +562,7 @@ void CardDav::sslErrorsOccurred(const QList<QSslError> &errors)
 void CardDav::userInformationResponse()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    QByteArray data = reply->readAll();
+    const QByteArray data = reply->readAll();
     if (reply->error() != QNetworkReply::NoError) {
         int httpError = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         LOG_WARNING(Q_FUNC_INFO << "error:" << reply->error() << "(" << httpError << ") to request" << m_serverUrl);
@@ -616,7 +634,7 @@ void CardDav::userInformationResponse()
     }
 
     ReplyParser::ResponseType responseType = ReplyParser::UserPrincipalResponse;
-    QString userPath = m_parser->parseUserPrincipal(data, &responseType);
+    const QString userPath = m_parser->parseUserPrincipal(data, &responseType);
     if (responseType == ReplyParser::UserPrincipalResponse) {
         // the server responded with the expected user principal information.
         if (userPath.isEmpty()) {
@@ -634,7 +652,7 @@ void CardDav::userInformationResponse()
             emit error();
             return;
         }
-        downsyncAddressbookContent(infos);
+        emit addressbooksList(infos);
     } else {
         LOG_WARNING(Q_FUNC_INFO << "unknown response from user principal request");
         emit error();
@@ -657,7 +675,7 @@ void CardDav::fetchAddressbookUrls(const QString &userPath)
 void CardDav::addressbookUrlsResponse()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    QByteArray data = reply->readAll();
+    const QByteArray data = reply->readAll();
     if (reply->error() != QNetworkReply::NoError) {
         int httpError = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         LOG_WARNING(Q_FUNC_INFO << "error:" << reply->error()
@@ -667,7 +685,7 @@ void CardDav::addressbookUrlsResponse()
         return;
     }
 
-    QString addressbooksHomePath = m_parser->parseAddressbookHome(data);
+    const QString addressbooksHomePath = m_parser->parseAddressbookHome(data);
     if (addressbooksHomePath.isEmpty()) {
         LOG_WARNING(Q_FUNC_INFO << "unable to parse addressbook home from response");
         emit error();
@@ -695,7 +713,7 @@ void CardDav::addressbooksInformationResponse()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
     QString addressbooksHomePath = reply->property("addressbooksHomePath").toString();
-    QByteArray data = reply->readAll();
+    const QByteArray data = reply->readAll();
     if (reply->error() != QNetworkReply::NoError) {
         int httpError = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         LOG_WARNING(Q_FUNC_INFO << "error:" << reply->error()
@@ -722,90 +740,67 @@ void CardDav::addressbooksInformationResponse()
         } else {
             LOG_WARNING(Q_FUNC_INFO << "unable to parse addressbook info from response");
             emit error();
-            return;
         }
-    }
-
-    if (m_addressbooksListOnly) {
-        QStringList paths;
-        for (QList<ReplyParser::AddressBookInformation>::const_iterator it = infos.constBegin(); it != infos.constEnd(); ++it) {
-            if (!paths.contains(it->url)) {
-                paths.append(it->url);
-            }
-        }
-        emit addressbooksList(paths);
     } else {
-        downsyncAddressbookContent(infos);
+        emit addressbooksList(infos);
     }
 }
 
-void CardDav::downsyncAddressbookContent(const QList<ReplyParser::AddressBookInformation> &infos)
+bool CardDav::downsyncAddressbookContent(
+        const QString &addressbookUrl,
+        const QString &newSyncToken,
+        const QString &newCtag,
+        const QString &oldSyncToken,
+        const QString &oldCtag)
 {
-    // for addressbooks which support sync-token syncing, use that style.
-    for (int i = 0; i < infos.size(); ++i) {
-        // set a default addressbook if we haven't seen one yet.
-        // we will store newly added local contacts to that addressbook.
-        if (q->m_defaultAddressbook.isEmpty()) {
-            q->m_defaultAddressbook = infos[i].url;
-        }
-
-        if (infos[i].syncToken.isEmpty() && infos[i].ctag.isEmpty()) {
-            // we cannot use either sync-token or ctag for this addressbook.
-            // we need to manually calculate the complete delta.
-            LOG_DEBUG("No sync-token or ctag given for addressbook:" << infos[i].url << ", manual delta detection required");
-            q->m_addressbookCtags[infos[i].url] = infos[i].ctag; // ctag is empty :. we will use manual detection.
-            fetchContactMetadata(infos[i].url);
-        } else if (infos[i].syncToken.isEmpty()) {
-            // we cannot use sync-token for this addressbook, but instead ctag.
-            const QString existingCtag(q->m_addressbookCtags[infos[i].url]); // from OOB
-            if (existingCtag.isEmpty()) {
-                // first time sync
-                q->m_addressbookCtags[infos[i].url] = infos[i].ctag; // insert
-                // now do etag request, the delta will be all remote additions
-                fetchContactMetadata(infos[i].url);
-            } else if (existingCtag != infos[i].ctag) {
-                // changes have occurred since last sync
-                q->m_addressbookCtags[infos[i].url] = infos[i].ctag; // update
-                // perform etag request and then manually calculate deltas.
-                fetchContactMetadata(infos[i].url);
-            } else {
-                // no changes have occurred in this addressbook since last sync
-                LOG_DEBUG(Q_FUNC_INFO << "no changes since last sync for"
-                         << infos[i].url << "from account" << q->m_accountId);
-                m_downsyncRequests += 1;
-                QTimer::singleShot(0, this, SLOT(downsyncComplete()));
-            }
+    if (newSyncToken.isEmpty() && newCtag.isEmpty()) {
+        // we cannot use either sync-token or ctag for this addressbook.
+        // we need to manually calculate the complete delta.
+        LOG_DEBUG("No sync-token or ctag given for addressbook:" << addressbookUrl << ", manual delta detection required");
+        return fetchContactMetadata(addressbookUrl);
+    } else if (newSyncToken.isEmpty()) {
+        // we cannot use sync-token for this addressbook, but instead ctag.
+        if (oldCtag.isEmpty()) {
+            // first time sync
+            // do etag request, the delta will be all remote additions
+            return fetchContactMetadata(addressbookUrl);
+        } else if (oldCtag != newCtag) {
+            // changes have occurred since last sync
+            // perform etag request and then manually calculate deltas.
+            return fetchContactMetadata(addressbookUrl);
         } else {
-            // the server supports webdav-sync for this addressbook.
-            const QString existingSyncToken(q->m_addressbookSyncTokens[infos[i].url]); // from OOB
-            // store the ctag anyway just in case the server has
-            // forgotten the syncToken we cached from last time.
-            if (!infos[i].ctag.isEmpty()) {
-                q->m_addressbookCtags[infos[i].url] = infos[i].ctag;
-            }
-            // attempt to perform synctoken sync
-            if (existingSyncToken.isEmpty()) {
-                // first time sync
-                q->m_addressbookSyncTokens[infos[i].url] = infos[i].syncToken; // insert
-                // perform slow sync / full report
-                fetchContactMetadata(infos[i].url);
-            } else if (existingSyncToken != infos[i].syncToken) {
-                // changes have occurred since last sync.
-                q->m_addressbookSyncTokens[infos[i].url] = infos[i].syncToken; // update
-                // perform immediate delta sync, by passing the old sync token to the server.
-                fetchImmediateDelta(infos[i].url, existingSyncToken);
-            } else {
-                // no changes have occurred in this addressbook since last sync
-                LOG_DEBUG(Q_FUNC_INFO << "no changes since last sync for"
-                         << infos[i].url << "from account" << q->m_accountId);
-                m_downsyncRequests += 1;
-                QTimer::singleShot(0, this, SLOT(downsyncComplete()));
-            }
+            // no changes have occurred in this addressbook since last sync
+            LOG_DEBUG(Q_FUNC_INFO << "no changes since last sync for"
+                     << addressbookUrl << "from account" << q->m_accountId);
+            QTimer::singleShot(0, this, [this, addressbookUrl] () {
+                calculateContactChanges(addressbookUrl, QList<QContact>(), QList<QContact>());
+            });
+            return true;
+        }
+    } else {
+        // the server supports webdav-sync for this addressbook.
+        // attempt to perform synctoken sync
+        if (oldSyncToken.isEmpty()) {
+            // first time sync
+            // perform slow sync / full report
+            return fetchContactMetadata(addressbookUrl);
+        } else if (oldSyncToken != newSyncToken) {
+            // changes have occurred since last sync.
+            // perform immediate delta sync, by passing the old sync token to the server.
+            return fetchImmediateDelta(addressbookUrl, oldSyncToken);
+        } else {
+            // no changes have occurred in this addressbook since last sync
+            LOG_DEBUG(Q_FUNC_INFO << "no changes since last sync for"
+                     << addressbookUrl << "from account" << q->m_accountId);
+            QTimer::singleShot(0, this, [this, addressbookUrl] () {
+                calculateContactChanges(addressbookUrl, QList<QContact>(), QList<QContact>());
+            });
+            return true;
         }
     }
 }
 
-void CardDav::fetchImmediateDelta(const QString &addressbookUrl, const QString &syncToken)
+bool CardDav::fetchImmediateDelta(const QString &addressbookUrl, const QString &syncToken)
 {
     LOG_DEBUG(Q_FUNC_INFO
              << "requesting immediate delta for addressbook" << addressbookUrl
@@ -813,21 +808,20 @@ void CardDav::fetchImmediateDelta(const QString &addressbookUrl, const QString &
 
     QNetworkReply *reply = m_request->syncTokenDelta(m_serverUrl, addressbookUrl, syncToken);
     if (!reply) {
-        emit error();
-        return;
+        return false;
     }
 
-    m_downsyncRequests += 1; // when this reaches zero, we've finished all addressbook deltas
     reply->setProperty("addressbookUrl", addressbookUrl);
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
     connect(reply, SIGNAL(finished()), this, SLOT(immediateDeltaResponse()));
+    return true;
 }
 
 void CardDav::immediateDeltaResponse()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    QString addressbookUrl = reply->property("addressbookUrl").toString();
-    QByteArray data = reply->readAll();
+    const QString addressbookUrl = reply->property("addressbookUrl").toString();
+    const QByteArray data = reply->readAll();
     if (reply->error() != QNetworkReply::NoError) {
         LOG_WARNING(Q_FUNC_INFO << "error:" << reply->error()
                    << "(" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() << ")");
@@ -839,31 +833,34 @@ void CardDav::immediateDeltaResponse()
     }
 
     QString newSyncToken;
-    QList<ReplyParser::ContactInformation> infos = m_parser->parseSyncTokenDelta(data, &newSyncToken);
-    q->m_addressbookSyncTokens[addressbookUrl] = newSyncToken;
+    QList<ReplyParser::ContactInformation> infos = m_parser->parseSyncTokenDelta(data, addressbookUrl, &newSyncToken);
+
+    QContactCollection addressbook = q->m_currentCollections[addressbookUrl];
+    addressbook.setExtendedMetaData(KEY_SYNCTOKEN, newSyncToken);
+    q->m_currentCollections.insert(addressbookUrl, addressbook);
+
     fetchContacts(addressbookUrl, infos);
 }
 
-void CardDav::fetchContactMetadata(const QString &addressbookUrl)
+bool CardDav::fetchContactMetadata(const QString &addressbookUrl)
 {
     LOG_DEBUG(Q_FUNC_INFO << "requesting contact metadata for addressbook" << addressbookUrl);
     QNetworkReply *reply = m_request->contactEtags(m_serverUrl, addressbookUrl);
     if (!reply) {
-        emit error();
-        return;
+        return false;
     }
 
-    m_downsyncRequests += 1; // when this reaches zero, we've finished all addressbook deltas
     reply->setProperty("addressbookUrl", addressbookUrl);
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
     connect(reply, SIGNAL(finished()), this, SLOT(contactMetadataResponse()));
+    return true;
 }
 
 void CardDav::contactMetadataResponse()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    QString addressbookUrl = reply->property("addressbookUrl").toString();
-    QByteArray data = reply->readAll();
+    const QString addressbookUrl = reply->property("addressbookUrl").toString();
+    const QByteArray data = reply->readAll();
     if (reply->error() != QNetworkReply::NoError) {
         int httpError = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         LOG_WARNING(Q_FUNC_INFO << "error:" << reply->error()
@@ -873,7 +870,32 @@ void CardDav::contactMetadataResponse()
         return;
     }
 
-    QList<ReplyParser::ContactInformation> infos = m_parser->parseContactMetadata(data, addressbookUrl);
+    // if we are determining contact changes (i.e. delta) then we will
+    // have local contact AMRU information cached for this addressbook.
+    // build a cache list of the old etags of the still-existent contacts.
+    QHash<QString, QString> uriToEtag;
+    if (q->m_collectionAMRU.contains(addressbookUrl)) {
+        auto createHash = [&uriToEtag] (const QList<QContact> &contacts) {
+            for (const QContact &c : contacts) {
+                const QString uri = c.detail<QContactSyncTarget>().syncTarget();
+                if (uri.isEmpty()) {
+                    LOG_WARNING(Q_FUNC_INFO << ": carddav contact has empty sync target (uri): " << QString::fromLatin1(c.id().localId()));
+                } else {
+                    const QList<QContactExtendedDetail> dets = c.details<QContactExtendedDetail>();
+                    for (const QContactExtendedDetail &d : dets) {
+                        if (d.name() == KEY_ETAG) {
+                            uriToEtag.insert(uri, d.data().toString());
+                            break;
+                        }
+                    }
+                }
+            }
+        };
+        createHash(q->m_collectionAMRU[addressbookUrl].modified);
+        createHash(q->m_collectionAMRU[addressbookUrl].unmodified);
+    }
+
+    QList<ReplyParser::ContactInformation> infos = m_parser->parseContactMetadata(data, addressbookUrl, uriToEtag);
     fetchContacts(addressbookUrl, infos);
 }
 
@@ -881,34 +903,35 @@ void CardDav::fetchContacts(const QString &addressbookUrl, const QList<ReplyPars
 {
     LOG_DEBUG(Q_FUNC_INFO << "requesting full contact information from addressbook" << addressbookUrl);
 
-    // split into A/M/R request sets
+    // split into A/M/R/U request sets
     QStringList contactUris;
     Q_FOREACH (const ReplyParser::ContactInformation &info, amrInfo) {
         if (info.modType == ReplyParser::ContactInformation::Addition) {
-            q->m_serverAdditionIndices[addressbookUrl].insert(info.uri, q->m_serverAdditions[addressbookUrl].size());
-            q->m_serverAdditions[addressbookUrl].append(info);
+            q->m_remoteAdditions[addressbookUrl].insert(info.uri, info);
             contactUris.append(info.uri);
         } else if (info.modType == ReplyParser::ContactInformation::Modification) {
-            q->m_serverModificationIndices[addressbookUrl].insert(info.uri, q->m_serverModifications[addressbookUrl].size());
-            q->m_serverModifications[addressbookUrl].append(info);
+            q->m_remoteModifications[addressbookUrl].insert(info.uri, info);
             contactUris.append(info.uri);
         } else if (info.modType == ReplyParser::ContactInformation::Deletion) {
-            q->m_serverDeletions[addressbookUrl].append(info);
+            q->m_remoteRemovals[addressbookUrl].insert(info.uri, info);
+        } else if (info.modType == ReplyParser::ContactInformation::Unmodified) {
+            q->m_remoteUnmodified[addressbookUrl].insert(info.uri, info);
         } else {
             LOG_WARNING(Q_FUNC_INFO << "no modification type in info for:" << info.uri);
         }
     }
 
-    LOG_DEBUG(Q_FUNC_INFO << "Have calculated AMR:"
-             << q->m_serverAdditions[addressbookUrl].size()
-             << q->m_serverModifications[addressbookUrl].size()
-             << q->m_serverDeletions[addressbookUrl].size()
+    LOG_DEBUG(Q_FUNC_INFO << "Have calculated A/M/R/U:"
+             << q->m_remoteAdditions[addressbookUrl].size() << "/"
+             << q->m_remoteModifications[addressbookUrl].size() << "/"
+             << q->m_remoteRemovals[addressbookUrl].size() << "/"
+             << q->m_remoteUnmodified[addressbookUrl].size()
              << "for addressbook:" << addressbookUrl);
 
     if (contactUris.isEmpty()) {
         // no additions or modifications to fetch.
         LOG_DEBUG(Q_FUNC_INFO << "no further data to fetch");
-        contactAddModsComplete(addressbookUrl);
+        calculateContactChanges(addressbookUrl, QList<QContact>(), QList<QContact>());
     } else {
         // fetch the full contact data for additions/modifications.
         LOG_DEBUG(Q_FUNC_INFO << "fetching vcard data for" << contactUris.size() << "contacts");
@@ -927,8 +950,8 @@ void CardDav::fetchContacts(const QString &addressbookUrl, const QList<ReplyPars
 void CardDav::contactsResponse()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    QString addressbookUrl = reply->property("addressbookUrl").toString();
-    QByteArray data = reply->readAll();
+    const QString addressbookUrl = reply->property("addressbookUrl").toString();
+    const QByteArray data = reply->readAll();
     if (reply->error() != QNetworkReply::NoError) {
         int httpError = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         LOG_WARNING(Q_FUNC_INFO << "error:" << reply->error()
@@ -941,115 +964,62 @@ void CardDav::contactsResponse()
     QList<QContact> added;
     QList<QContact> modified;
 
-    // fill out added/modified.  Also keep our addressbookContactGuids state up-to-date.
-    // The addMods map is a map from server contact uri to <contact/unsupportedProperties/etag>.
-    QMap<QString, ReplyParser::FullContactInformation> addMods = m_parser->parseContactData(data, addressbookUrl);
-    QMap<QString, ReplyParser::FullContactInformation>::const_iterator it = addMods.constBegin();
-    for ( ; it != addMods.constEnd(); ++it) {
-        if (q->m_serverAdditionIndices[addressbookUrl].contains(it.key())) {
-            QContact c = it.value().contact;
-            QString guid = c.detail<QContactGuid>().guid();
-            q->m_serverAdditions[addressbookUrl][q->m_serverAdditionIndices[addressbookUrl].value(it.key())].guid = guid;
-            q->m_contactEtags[guid] = it.value().etag;
-            q->m_contactUris[guid] = it.key();
-            q->m_contactUnsupportedProperties[guid] = it.value().unsupportedProperties;
-            // Note: for additions, q->m_contactUids will have been filled out by the reply parser.
-            q->m_addressbookContactGuids[addressbookUrl].append(guid);
-            // Check to see if this server-side addition is actually just
-            // a reported previously-upsynced local-side addition.
-            if (q->m_contactIds.contains(guid)) {
-                QContact previouslyUpsynced = c;
-                previouslyUpsynced.setId(QContactId::fromString(q->m_contactIds[guid]));
-                added.append(previouslyUpsynced);
-            } else {
-                // pure server-side addition.
-                added.append(c);
-            }
-            q->m_serverAddModsByUid.insert(q->m_contactUids[guid], qMakePair(addressbookUrl, c));
-        } else if (q->m_serverModificationIndices[addressbookUrl].contains(it.key())) {
-            QContact c = it.value().contact;
-            QString guid = c.detail<QContactGuid>().guid();
-            q->m_contactUnsupportedProperties[guid] = it.value().unsupportedProperties;
-            q->m_contactEtags[guid] = it.value().etag;
-            if (!q->m_contactIds.contains(guid)) {
-                LOG_WARNING(Q_FUNC_INFO << "modified contact has no id");
-            } else {
-                c.setId(QContactId::fromString(q->m_contactIds[guid]));
-            }
-            modified.append(c);
-            q->m_serverAddModsByUid.insert(q->m_contactUids[guid], qMakePair(addressbookUrl, c));
+    const QHash<QString, QContact> addMods = m_parser->parseContactData(data, addressbookUrl);
+    QHash<QString, QContact>::const_iterator it = addMods.constBegin(), end = addMods.constEnd();
+    for ( ; it != end; ++it) {
+        const QString contactUri = it.key();
+        if (q->m_remoteAdditions[addressbookUrl].contains(contactUri)) {
+            added.append(it.value());
+        } else if (q->m_remoteModifications[addressbookUrl].contains(contactUri)) {
+            modified.append(it.value());
         } else {
-            LOG_WARNING(Q_FUNC_INFO << "ignoring unknown addition/modification:" << it.key());
+            LOG_WARNING(Q_FUNC_INFO << "ignoring unknown addition/modification:" << contactUri);
         }
     }
 
-    // coalesce the added/modified contacts from this addressbook into the complete AMR
-    m_remoteAdditions.append(added);
-    m_remoteModifications.append(modified);
-
-    // now handle removals
-    contactAddModsComplete(addressbookUrl);
+    calculateContactChanges(addressbookUrl, added, modified);
 }
 
-void CardDav::contactAddModsComplete(const QString &addressbookUrl)
+void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified)
 {
-    QList<QContact> removed;
+    // at this point, we have already retrieved the added+modified contacts from the server.
+    // we need to populate the removed contacts list, by inspecting the local data.
+    if (!q->m_collectionAMRU.contains(addressbookUrl)) {
+        Q_ASSERT(modified.isEmpty());
+        q->remoteContactsDetermined(q->m_currentCollections[addressbookUrl], added);
+    } else {
+        QList<QContact> removed;
+        const Syncer::AMRU amru = q->m_collectionAMRU.take(addressbookUrl);
+        auto appendMatches = [] (const QList<QContact> &contacts,
+                                 const QHash<QString, QHash<QString, ReplyParser::ContactInformation> > &hash,
+                                 QList<QContact> *list) {
+            for (const QContact &c : contacts) {
+                const QString uri = c.detail<QContactSyncTarget>().syncTarget();
+                if (!uri.isEmpty() && hash.contains(uri)) {
+                    list->append(c);
+                }
+            }
+        };
+        appendMatches(amru.added, q->m_remoteRemovals, &removed);
+        appendMatches(amru.modified, q->m_remoteRemovals, &removed);
+        appendMatches(amru.removed, q->m_remoteRemovals, &removed);
+        appendMatches(amru.unmodified, q->m_remoteRemovals, &removed);
 
-    // fill out removed set, and remove any state data associated with removed contacts
-    for (int i = 0; i < q->m_serverDeletions[addressbookUrl].size(); ++i) {
-        QString guid = q->m_serverDeletions[addressbookUrl][i].guid;
-        if (!q->m_contactIds.contains(guid)) {
-            // check to see if we have an entry which matches the "old" guid form.
-            // if so, use the "old" guid form instead.
-            QString prefix = QStringLiteral("%1:AB:%2:").arg(QString::number(q->m_accountId), addressbookUrl);
-            if (guid.startsWith(prefix)) {
-                guid = QStringLiteral("%1:%2").arg(QString::number(q->m_accountId), guid.mid(prefix.length()));
+        // we also need to find the local ids associated with the modified contacts.
+        QList<QContact> modifiedWithIds = modified;
+        for (int i = 0; i < modifiedWithIds.size(); ++i) {
+            QContact &c(modifiedWithIds[i]);
+            QContactId matchingId = matchingContactFromList(c, amru.added);
+            if (matchingId.isNull()) matchingId = matchingContactFromList(c, amru.modified);
+            if (matchingId.isNull()) matchingId = matchingContactFromList(c, amru.removed);
+            if (matchingId.isNull()) matchingId = matchingContactFromList(c, amru.unmodified);
+            if (!matchingId.isNull()) {
+                c.setId(matchingId);
             }
         }
 
-        // create the contact to remove
-        QContact doomed;
-        QContactGuid cguid;
-        cguid.setGuid(guid);
-        doomed.saveDetail(&cguid);
-        if (!q->m_contactIds.contains(guid)) {
-            LOG_WARNING(Q_FUNC_INFO << "removed contact has no id");
-            continue; // cannot remove it if we don't know the id
-        }
-        doomed.setId(QContactId::fromString(q->m_contactIds[guid]));
-        removed.append(doomed);
-
-        // update the state data
-        q->m_contactUids.remove(guid);
-        q->m_contactUris.remove(guid);
-        q->m_contactEtags.remove(guid);
-        q->m_contactIds.remove(guid);
-        q->m_contactUnsupportedProperties.remove(guid);
-        q->m_addressbookContactGuids[addressbookUrl].removeOne(guid);
-    }
-
-    // coalesce the removed contacts from this addressbook into the complete AMR
-    m_remoteRemovals.append(removed);
-
-    // downsync complete for this addressbook.
-    // we use a singleshot to ensure that the m_deltaRequests count isn't
-    // decremented synchronously to zero if the first addressbook didn't
-    // have any remote additions or modifications (requiring async request).
-    QTimer::singleShot(0, this, SLOT(downsyncComplete()));
-}
-
-void CardDav::downsyncComplete()
-{
-    // downsync complete for this addressbook
-    // if this was the last outstanding addressbook, we're finished.
-    m_downsyncRequests -= 1;
-    if (m_downsyncRequests == 0) {
-        LOG_DEBUG(Q_FUNC_INFO
-                 << "downsync complete with total AMR:"
-                 << m_remoteAdditions.size() << ","
-                 << m_remoteModifications.size() << ","
-                 << m_remoteRemovals.size());
-        emit remoteChanges(m_remoteAdditions, m_remoteModifications, m_remoteRemovals);
+        // TODO: also match remotely added to locally added, to find partial upsync artifacts.
+        q->remoteContactChangesDetermined(q->m_currentCollections[addressbookUrl], added, modifiedWithIds, removed);
     }
 }
 
@@ -1076,24 +1046,14 @@ static QString transformIntoAddressbookSpecificGuid(const QString &guidstr, int 
     return retn;
 }
 
-static void setUpsyncContactGuid(QContact *c, const QString &uid)
+static void setContactGuid(QContact *c, const QString &uid)
 {
-    // in the case where the exact same contact is contained
-    // in multiple remote addressbooks, the syncContact generated
-    // locally may contain duplicated GUID data.  Filter these out
-    // and instead set the UID as the guid field for upsync.
-    QList<QContactGuid> guids = c->details<QContactGuid>();
-    for (int i = guids.size(); i > 1; --i) {
-        QContactGuid &g(guids[i-1]);
-        c->removeDetail(&g);
-    }
-
     QContactGuid newGuid = c->detail<QContactGuid>();
     newGuid.setGuid(uid);
-    c->saveDetail(&newGuid);
+    c->saveDetail(&newGuid, QContact::IgnoreAccessConstraints);
 }
 
-void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified, const QList<QContact> &removed)
+bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified, const QList<QContact> &removed)
 {
     LOG_DEBUG(Q_FUNC_INFO
              << "upsyncing updates to addressbook:" << addressbookUrl
@@ -1102,31 +1062,50 @@ void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
     bool hadNonSpuriousChanges = false;
     int spuriousModifications = 0;
 
+    m_upsyncRequests.insert(addressbookUrl, 0);
+    if (added.size() || modified.size()) {
+        m_upsyncedChanges.insert(addressbookUrl, UpsyncedContacts());
+    }
+
     // put local additions
     for (int i = 0; i < added.size(); ++i) {
         QContact c = added.at(i);
-        // generate a server-side uid
-        QString uid = QUuid::createUuid().toString().replace(QRegularExpression(QStringLiteral("[\\-{}]")), QString());
-        // transform into local-device guid
-        QString guid = QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid);
+
+        // generate a server-side uid.  this does NOT contain addressbook prefix etc.
+        const QString uid = QUuid::createUuid().toString().replace(QRegularExpression(QStringLiteral("[\\-{}]")), QString());
+        // set the uid so that the VCF UID is generated.
+        setContactGuid(&c, uid);
+
         // generate a valid uri
-        QString uri = addressbookUrl + (addressbookUrl.endsWith('/') ? QString() : QStringLiteral("/")) + uid + QStringLiteral(".vcf");
-        // update our state data
-        q->m_contactUids[guid] = uid;
-        q->m_contactUris[guid] = uri;
-        q->m_contactIds[guid] = c.id().toString();
-        // set the uid not guid so that the VCF UID is generated.
-        setUpsyncContactGuid(&c, uid);
+        const QString uri = addressbookUrl + (addressbookUrl.endsWith('/') ? QString() : QStringLiteral("/")) + uid + QStringLiteral(".vcf");
+        QContactSyncTarget st = c.detail<QContactSyncTarget>();
+        st.setSyncTarget(uri);
+        c.saveDetail(&st, QContact::IgnoreAccessConstraints);
+
+        // ensure that we haven't already upsynced this one previously, i.e. partial upsync artifact
+        if (q->m_remoteAdditions[addressbookUrl].contains(uri)
+                || q->m_remoteModifications[addressbookUrl].contains(uri)
+                || q->m_remoteRemovals[addressbookUrl].contains(uri)
+                || q->m_remoteUnmodified[addressbookUrl].contains(uri)) {
+            // this contact was previously upsynced already.
+            continue;
+        }
+
         // generate a vcard
-        QString vcard = m_converter->convertContactToVCard(c, QStringList());
+        const QString vcard = m_converter->convertContactToVCard(c, QStringList());
         // upload
         QNetworkReply *reply = m_request->upsyncAddMod(m_serverUrl, uri, QString(), vcard);
         if (!reply) {
-            emit error();
-            return;
+            return false;
         }
 
-        m_upsyncRequests += 1;
+        // set the addressbook-prefixed guid into the contact.
+        const QString guid = QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid);
+        setContactGuid(&c, guid);
+
+        // cached the updated contact, as it will eventually be written back to the local database with updated guid + etag.
+        m_upsyncedChanges[addressbookUrl].additions.append(c);
+        m_upsyncRequests[addressbookUrl] += 1;
         hadNonSpuriousChanges = true;
         reply->setProperty("addressbookUrl", addressbookUrl);
         reply->setProperty("contactGuid", guid);
@@ -1137,58 +1116,52 @@ void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
     // put local modifications
     for (int i = 0; i < modified.size(); ++i) {
         QContact c = modified.at(i);
-        // reinstate the server-side UID into the guid detail
-        QString guidstr = c.detail<QContactGuid>().guid();
+
+        // reinstate the server-side UID into the guid detail for upsync
+        const QString guidstr = c.detail<QContactGuid>().guid();
+        const QString uidPrefix = QStringLiteral("%1:AB:%2:").arg(QString::number(q->m_accountId), addressbookUrl);
         if (guidstr.isEmpty()) {
             LOG_WARNING(Q_FUNC_INFO << "modified contact has no guid:" << c.id().toString());
             continue; // TODO: this is actually an error.
-        }
-        QString oldguidstr = guidstr;
-        guidstr = transformIntoAddressbookSpecificGuid(guidstr, q->m_accountId, addressbookUrl);
-        QString uidstr = q->m_contactUids[guidstr];
-        if (uidstr.isEmpty()) {
-            // check to see if the old guid was used previously.
-            // this should only occur after the package upgrade, and not normally.
-            if (!q->m_contactUids.value(oldguidstr).isEmpty()) {
-                q->migrateGuidData(oldguidstr, guidstr, addressbookUrl);
-                uidstr = q->m_contactUids.value(guidstr);
-            } else {
-                LOG_WARNING(Q_FUNC_INFO << "modified contact server uid unknown:" << c.id().toString() << guidstr);
-                continue; // TODO: this is actually an error.
-            }
-        }
-        setUpsyncContactGuid(&c, uidstr);
-        // now check to see if it's a spurious change caused by downsync of a remote addition/modification
-        // perhaps to the same contact in a different addressbook.
-        if (q->m_serverAddModsByUid.contains(uidstr)) {
-            bool spurious = true;
-            const QList<QPair<QString, QContact> > &addressbookContacts(q->m_serverAddModsByUid.values(uidstr));
-            for (int j = 0; j < addressbookContacts.size(); ++j) {
-                QContact downsyncedContact = addressbookContacts[j].second;
-                if (q->significantDifferences(&c, &downsyncedContact)) {
-                    spurious = false;
-                    break;
-                }
-            }
-            if (spurious) {
-                LOG_DEBUG(Q_FUNC_INFO << "not upsyncing spurious change to contact:" << guidstr);
-                spuriousModifications += 1;
-                continue;
-            }
-        }
-        // otherwise, convert to vcard and upsync to remote server.
-        QString vcard = m_converter->convertContactToVCard(c, q->m_contactUnsupportedProperties[guidstr]);
-        // upload
-        QNetworkReply *reply = m_request->upsyncAddMod(m_serverUrl,
-                q->m_contactUris[guidstr],
-                q->m_contactEtags[guidstr],
-                vcard);
-        if (!reply) {
-            emit error();
-            return;
+        } else if (!guidstr.startsWith(uidPrefix)) {
+            LOG_WARNING(Q_FUNC_INFO << "modified contact: " << QString::fromLatin1(c.id().localId())
+                                    << "has guid with invalid form: " << guidstr);
+            continue; // TODO: this is actually an error.
+        } else {
+            const QString uidstr = guidstr.mid(uidPrefix.size());
+            setContactGuid(&c, uidstr);
         }
 
-        m_upsyncRequests += 1;
+        QString etag;
+        for (const QContactExtendedDetail &ed : c.details<QContactExtendedDetail>()) {
+            if (ed.name() == KEY_ETAG) {
+                etag = ed.data().toString();
+                break;
+            }
+        }
+
+        QStringList unsupportedProperties;
+        for (const QContactExtendedDetail &ed : c.details<QContactExtendedDetail>()) {
+            if (ed.name() == KEY_UNSUPPORTEDPROPERTIES) {
+                unsupportedProperties = ed.data().toStringList();
+                break;
+            }
+        }
+
+        // convert to vcard and upsync to remote server.
+        const QString uri = c.detail<QContactSyncTarget>().syncTarget();
+        const QString vcard = m_converter->convertContactToVCard(c, unsupportedProperties);
+
+        // upload
+        QNetworkReply *reply = m_request->upsyncAddMod(m_serverUrl, uri, etag, vcard);
+        if (!reply) {
+            return false;
+        }
+
+        // cached the updated contact, as it will eventually be written back to the local database with updated guid + etag.
+        setContactGuid(&c, guidstr);
+        m_upsyncedChanges[addressbookUrl].modifications.append(c);
+        m_upsyncRequests[addressbookUrl] += 1;
         hadNonSpuriousChanges = true;
         reply->setProperty("addressbookUrl", addressbookUrl);
         reply->setProperty("contactGuid", guidstr);
@@ -1199,35 +1172,25 @@ void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
     // delete local removals
     for (int i = 0; i < removed.size(); ++i) {
         QContact c = removed[i];
-        QString guidstr = c.detail<QContactGuid>().guid();
-        QString oldguidstr = guidstr;
-        guidstr = transformIntoAddressbookSpecificGuid(guidstr, q->m_accountId, addressbookUrl);
-        if (q->m_contactUris.value(guidstr).isEmpty()) {
-            // check to see if the old guid was used previously.
-            // this should only occur after the package upgrade, and not normally.
-            if (!q->m_contactUris.value(oldguidstr).isEmpty()) {
-                q->migrateGuidData(oldguidstr, guidstr, addressbookUrl);
-            } else {
-                LOG_WARNING(Q_FUNC_INFO << "deleted contact server uri unknown:" << c.id().toString() << guidstr);
-                continue; // TODO: this is actually an error.
+        const QString guidstr = c.detail<QContactGuid>().guid();
+        const QString uri = c.detail<QContactSyncTarget>().syncTarget();
+        if (uri.isEmpty()) {
+            LOG_WARNING(Q_FUNC_INFO << "deleted contact server uri unknown:" << QString::fromLatin1(c.id().localId()) << " - " << guidstr);
+            continue; // TODO: this is actually an error.
+        }
+        QString etag;
+        for (const QContactExtendedDetail &ed : c.details<QContactExtendedDetail>()) {
+            if (ed.name() == KEY_ETAG) {
+                etag = ed.data().toString();
+                break;
             }
         }
-        QNetworkReply *reply = m_request->upsyncDeletion(m_serverUrl,
-                q->m_contactUris[guidstr],
-                q->m_contactEtags[guidstr]);
+        QNetworkReply *reply = m_request->upsyncDeletion(m_serverUrl, uri, etag);
         if (!reply) {
-            emit error();
-            return;
+            return false;
         }
 
-        // clear state data for this (deleted) contact
-        q->m_contactEtags.remove(guidstr);
-        q->m_contactUris.remove(guidstr);
-        q->m_contactIds.remove(guidstr);
-        q->m_contactUids.remove(guidstr);
-        q->m_addressbookContactGuids[addressbookUrl].removeOne(guidstr);
-
-        m_upsyncRequests += 1;
+        m_upsyncRequests[addressbookUrl] += 1;
         hadNonSpuriousChanges = true;
         reply->setProperty("addressbookUrl", addressbookUrl);
         connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
@@ -1238,18 +1201,26 @@ void CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         // nothing to upsync.  Use a singleshot to avoid synchronously
         // decrementing the m_upsyncRequests count to zero if there
         // happens to be nothing to upsync to the first addressbook.
-        m_upsyncRequests += 1;
-        QTimer::singleShot(0, this, SLOT(upsyncComplete()));
+        m_upsyncRequests[addressbookUrl] += 1;
+        QMetaObject::invokeMethod(this, "upsyncComplete", Qt::QueuedConnection, Q_ARG(QString, addressbookUrl));
     }
 
+    // clear our caches of info for this addressbook, no longer required.
+    q->m_remoteAdditions.remove(addressbookUrl);
+    q->m_remoteModifications.remove(addressbookUrl);
+    q->m_remoteRemovals.remove(addressbookUrl);
+    q->m_remoteUnmodified.remove(addressbookUrl);
+
     LOG_DEBUG(Q_FUNC_INFO << "ignored" << spuriousModifications << "spurious updates to addressbook:" << addressbookUrl);
+    return true;
 }
 
 void CardDav::upsyncResponse()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    QString guid = reply->property("contactGuid").toString();
-    QByteArray data = reply->readAll();
+    const QString addressbookUrl = reply->property("addressbookUrl").toString();
+    const QString guid = reply->property("contactGuid").toString();
+    const QByteArray data = reply->readAll();
     if (reply->error() != QNetworkReply::NoError) {
         int httpError = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         LOG_WARNING(Q_FUNC_INFO << "error:" << reply->error()
@@ -1280,7 +1251,26 @@ void CardDav::upsyncResponse()
 
         if (!etag.isEmpty()) {
             LOG_DEBUG("Got updated etag for" << guid << ":" << etag);
-            q->m_contactEtags[guid] = etag;
+            // store the updated etag into the upsynced contact
+            auto updateEtag = [this, &guid, etag] (QList<QContact> &upsynced) {
+                for (int i = upsynced.size() - 1; i >= 0; --i) {
+                    if (upsynced[i].detail<QContactGuid>().guid() == guid) {
+                        QContactExtendedDetail etagDetail;
+                        for (const QContactExtendedDetail &ed : upsynced[i].details<QContactExtendedDetail>()) {
+                            if (ed.name() == KEY_ETAG) {
+                                etagDetail = ed;
+                                break;
+                            }
+                        }
+                        etagDetail.setName(KEY_ETAG);
+                        etagDetail.setData(etag);
+                        upsynced[i].saveDetail(&etagDetail, QContact::IgnoreAccessConstraints);
+                        break;
+                    }
+                }
+            };
+            updateEtag(m_upsyncedChanges[addressbookUrl].additions);
+            updateEtag(m_upsyncedChanges[addressbookUrl].modifications);
         } else {
             // If we don't perform an additional request, the etag server-side will be different to the etag
             // we have locally, and thus on next sync we would spuriously detect a server-side modification.
@@ -1289,16 +1279,23 @@ void CardDav::upsyncResponse()
         }
     }
 
-    // upsync is complete for this addressbook.
-    upsyncComplete();
+    upsyncComplete(addressbookUrl);
 }
 
-void CardDav::upsyncComplete()
+void CardDav::upsyncComplete(const QString &addressbookUrl)
 {
-    m_upsyncRequests -= 1;
-    if (m_upsyncRequests == 0) {
-        // finished upsyncing all data for all addressbooks.
-        LOG_DEBUG(Q_FUNC_INFO << "upsync complete");
-        emit upsyncCompleted();
+    m_upsyncRequests[addressbookUrl] -= 1;
+    if (m_upsyncRequests[addressbookUrl] == 0) {
+        // finished upsyncing all data for the addressbook.
+        LOG_DEBUG(Q_FUNC_INFO << "upsync complete for addressbook: " << addressbookUrl);
+        // TODO: perform another request to get the ctag/synctoken after updates have been upsynced?
+        q->localChangesStoredRemotely(
+                q->m_currentCollections[addressbookUrl],
+                m_upsyncedChanges[addressbookUrl].additions,
+                m_upsyncedChanges[addressbookUrl].modifications);
+        m_upsyncedChanges.remove(addressbookUrl);
+        q->m_previousCtagSyncToken.remove(addressbookUrl);
+        q->m_currentCollections.remove(addressbookUrl);
+        q->m_localContactUrisEtags.remove(addressbookUrl);
     }
 }
