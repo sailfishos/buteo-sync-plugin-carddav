@@ -54,7 +54,7 @@ QContact removeIgnorableFields(const QContact &c)
     QList<QContactDetail> cdets = c.details();
     foreach (const QContactDetail &det, cdets) {
         QContactDetail d = det;
-        d.removeValue(QContactDetail__FieldProvenance);
+        d.removeValue(QContactDetail::FieldProvenance);
         d.removeValue(QContactDetail__FieldModifiable);
         d.removeValue(QContactDetail__FieldNonexportable);
         ret.saveDetail(&d);
