@@ -2,7 +2,6 @@ Name:       buteo-sync-plugin-carddav
 Summary:    Syncs contact data from CardDAV services
 Version:    0.0.32
 Release:    1
-Group:      System/Libraries
 License:    LGPLv2
 URL:        https://git.sailfishos.org/mer-core/buteo-sync-plugin-carddav
 Source0:    %{name}-%{version}.tar.bz2
@@ -38,9 +37,9 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 %files
 %defattr(-,root,root,-)
 #out-of-process-plugin
-/usr/lib/buteo-plugins-qt5/oopp/carddav-client
+%{_libdir}/buteo-plugins-qt5/oopp/carddav-client
 #in-process-plugin
-#/usr/lib/buteo-plugins-qt5/libcarddav-client.so
+#%%{_libdir}/buteo-plugins-qt5/libcarddav-client.so
 %config %{_sysconfdir}/buteo/profiles/client/carddav.xml
 %config %{_sysconfdir}/buteo/profiles/sync/carddav.Contacts.xml
 %license LICENSE
@@ -81,18 +80,17 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-contact-multiple-xgender.xml
 
 %prep
-%setup -q -n %{name}-%{version}
+%autosetup -n %{name}-%{version}
 
 %build
 %qmake5 "DEFINES+=BUTEO_OUT_OF_PROCESS_SUPPORT" "CONFIG+=build-tools"
-make %{?jobs:-j%jobs}
+%make_build
 
 %pre
 rm -f /home/nemo/.cache/msyncd/sync/client/carddav.xml || :
 rm -f /home/nemo/.cache/msyncd/sync/carddav.Contacts.xml || :
 
 %install
-rm -rf %{buildroot}
 %qmake5_install
 
 %post
