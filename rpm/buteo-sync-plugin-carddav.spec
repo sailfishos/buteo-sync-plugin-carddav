@@ -1,6 +1,6 @@
 Name:       buteo-sync-plugin-carddav
 Summary:    Syncs contact data from CardDAV services
-Version:    0.0.32
+Version:    0.1.0
 Release:    1
 License:    LGPLv2
 URL:        https://git.sailfishos.org/mer-core/buteo-sync-plugin-carddav
@@ -17,8 +17,8 @@ BuildRequires:  pkgconfig(buteosyncfw5)
 BuildRequires:  pkgconfig(accounts-qt5) >= 1.13
 BuildRequires:  pkgconfig(libsignon-qt5)
 BuildRequires:  pkgconfig(libsailfishkeyprovider)
-BuildRequires:  pkgconfig(qtcontacts-sqlite-qt5-extensions) >= 0.2.18
-BuildRequires:  pkgconfig(contactcache-qt5) >= 0.1.5
+BuildRequires:  pkgconfig(qtcontacts-sqlite-qt5-extensions) >= 0.3.0
+BuildRequires:  pkgconfig(contactcache-qt5) >= 0.3.0
 BuildRequires:  pkgconfig(libkcalcoren-qt5)
 BuildRequires:  pkgconfig(libmkcal-qt5)
 Requires: buteo-syncfw-qt5-msyncd
