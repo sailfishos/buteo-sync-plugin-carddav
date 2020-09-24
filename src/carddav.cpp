@@ -1023,29 +1023,6 @@ void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList
     }
 }
 
-static QString transformIntoAddressbookSpecificGuid(const QString &guidstr, int accountId, const QString &addressbookUrl)
-{
-    QString retn;
-    if (guidstr.startsWith(QStringLiteral("%1:AB:%2:").arg(QString::number(accountId), addressbookUrl))) {
-        // nothing to do, already a guid for this addressbook
-        return guidstr;
-    } else if (guidstr.startsWith(QStringLiteral("%1:AB:").arg(accountId))) {
-        // guid for a different addressbook.
-        LOG_WARNING("error: guid for different addressbook:" << guidstr);
-        return guidstr; // return it anyway, rather than attempt to mangle it with this addressbookUrl also.
-    } else {
-        // transform into addressbook-url style GUID.
-        if (guidstr.startsWith(QStringLiteral("%1:").arg(accountId))) {
-            // already accountId prefixed (e.g., from a previous sync cycle prior to when we supported addressbookUrl-prefixed-guids
-            retn = QStringLiteral("%1:AB:%2:%3").arg(QString::number(accountId), addressbookUrl, guidstr.mid(guidstr.indexOf(':')+1));
-        } else {
-            // non-prefixed, device-side guid (e.g., a local contact addition)
-            retn = QStringLiteral("%1:AB:%2:%3").arg(QString::number(accountId), addressbookUrl, guidstr);
-        }
-    }
-    return retn;
-}
-
 static void setContactGuid(QContact *c, const QString &uid)
 {
     QContactGuid newGuid = c->detail<QContactGuid>();

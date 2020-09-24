@@ -314,7 +314,7 @@ bool Syncer::determineRemoteContactChanges(
     return ret;
 }
 
-bool Syncer::deleteRemoteCollection(const QContactCollection &collection)
+bool Syncer::deleteRemoteCollection(const QContactCollection &)
 {
     // TODO: implement this.
     LOG_WARNING(Q_FUNC_INFO << "delete remote collection operation not supported for carddav!");
