@@ -48,6 +48,7 @@ public:
         QString displayName;
         QString ctag;
         QString syncToken;
+        bool readOnly = false;
     };
 
     class ContactInformation {

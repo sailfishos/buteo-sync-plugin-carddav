@@ -252,6 +252,25 @@ void tst_replyparser::parseAddressbookInformation_data()
         << QStringLiteral("data/replyparser_addressbookinformation_addressbook-plus-collection-resource.xml")
         << QStringLiteral("/carddav/accountname%40server.tld/addressbook/")
         << infos;
+
+    infos.clear();
+    ReplyParser::AddressBookInformation a7;
+    a7.url = QStringLiteral("/addressbooks/johndoe/contacts/");
+    a7.displayName = QStringLiteral("My Address Book");
+    a7.ctag = QStringLiteral("3145");
+    a7.syncToken = QStringLiteral("http://sabredav.org/ns/sync-token/3145");
+    a7.readOnly = false;
+    ReplyParser::AddressBookInformation a8;
+    a8.url = QStringLiteral("/addressbooks/johndoe/readonly-contacts/");
+    a8.displayName = QStringLiteral("ReadOnly Address Book");
+    a8.ctag = QStringLiteral("3149");
+    a8.syncToken = QStringLiteral("http://sabredav.org/ns/sync-token/3149");
+    a8.readOnly = true;
+    infos << a7 << a8;
+    QTest::newRow("two addressbooks information in response with privileges specified")
+        << QStringLiteral("data/replyparser_addressbookinformation_two-with-privileges.xml")
+        << QStringLiteral("/addressbooks/johndoe/")
+        << infos;
 }
 
 bool operator==(const ReplyParser::AddressBookInformation& first, const ReplyParser::AddressBookInformation& second)
@@ -259,7 +278,8 @@ bool operator==(const ReplyParser::AddressBookInformation& first, const ReplyPar
     return first.url == second.url
         && first.displayName == second.displayName
         && first.ctag == second.ctag
-        && first.syncToken == second.syncToken;
+        && first.syncToken == second.syncToken
+        && first.readOnly == second.readOnly;
 }
 
 void tst_replyparser::parseAddressbookInformation()

@@ -241,6 +241,10 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
                             <card:addressbook />
                         </d:resourcetype>
                         <d:displayname>My Address Book</d:displayname>
+                        <d:current-user-privilege-set>
+                            <d:privilege><d:read /></d:privilege>
+                            <d:privilege><d:write /></d:privilege>
+                        </d:current-user-privilege-set>
                         <cs:getctag>3145</cs:getctag>
                         <d:sync-token>http://sabredav.org/ns/sync-token/3145</d:sync-token>
                     </d:prop>
@@ -311,6 +315,17 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
             }
             if (prop.contains("displayname")) {
                 currInfo.displayName = prop.value("displayname").toMap().value("@text").toString();
+            }
+            if (prop.contains("current-user-privilege-set")) {
+                bool foundWrite = false;
+                const QVariantList privileges = prop.value("current-user-privilege-set").toMap().value("privilege").toList();
+                for (const QVariant &pv : privileges) {
+                    const QVariantMap pvm = pv.toMap();
+                    if (pvm.contains("write")) {
+                        foundWrite = true;
+                    }
+                }
+                currInfo.readOnly = !foundWrite;
             }
             bool thisPropstatIsForResourceType = false;
             if (prop.contains("resourcetype")) {

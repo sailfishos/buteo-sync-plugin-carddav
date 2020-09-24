@@ -142,6 +142,7 @@ bool Syncer::determineRemoteCollections()
                 addressbook.setExtendedMetaData(COLLECTION_EXTENDEDMETADATA_KEY_APPLICATIONNAME, CARDDAV_CONTACTS_APPLICATION);
                 addressbook.setExtendedMetaData(COLLECTION_EXTENDEDMETADATA_KEY_ACCOUNTID, m_accountId);
                 addressbook.setExtendedMetaData(COLLECTION_EXTENDEDMETADATA_KEY_REMOTEPATH, it->url);
+                addressbook.setExtendedMetaData(COLLECTION_EXTENDEDMETADATA_KEY_READONLY, it->readOnly);
                 addressbook.setExtendedMetaData(KEY_CTAG, it->ctag);
                 addressbook.setExtendedMetaData(KEY_SYNCTOKEN, it->syncToken);
                 addressbooks.append(addressbook);
@@ -175,6 +176,7 @@ bool Syncer::determineRemoteCollectionChanges(
                 addressbook.setExtendedMetaData(COLLECTION_EXTENDEDMETADATA_KEY_APPLICATIONNAME, CARDDAV_CONTACTS_APPLICATION);
                 addressbook.setExtendedMetaData(COLLECTION_EXTENDEDMETADATA_KEY_ACCOUNTID, m_accountId);
                 addressbook.setExtendedMetaData(COLLECTION_EXTENDEDMETADATA_KEY_REMOTEPATH, path);
+                addressbook.setExtendedMetaData(COLLECTION_EXTENDEDMETADATA_KEY_READONLY, it->readOnly);
                 addressbook.setExtendedMetaData(KEY_CTAG, it->ctag);
                 addressbook.setExtendedMetaData(KEY_SYNCTOKEN, it->syncToken);
                 remoteCollections.insert(path, addressbook);
