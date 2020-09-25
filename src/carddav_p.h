@@ -35,6 +35,7 @@
 #include <QSslError>
 
 #include <QContact>
+#include <QContactCollection>
 #include <QVersitContactImporterPropertyHandlerV2>
 #include <QVersitContactExporterDetailHandlerV2>
 
@@ -59,10 +60,14 @@ public:
             const QString &accessToken);
     ~CardDav();
 
-    void determineAddressbooksList(); // for cdavtool.
-
-    void determineRemoteAMR();
-    void upsyncUpdates(const QString &addressbookUrl,
+    void determineAddressbooksList();
+    bool downsyncAddressbookContent(
+            const QString &addressbookUrl,
+            const QString &newSyncToken,
+            const QString &newCtag,
+            const QString &oldSyncToken,
+            const QString &oldCtag);
+    bool upsyncUpdates(const QString &addressbookUrl,
                        const QList<QContact> &added,
                        const QList<QContact> &modified,
                        const QList<QContact> &removed);
@@ -73,15 +78,15 @@ Q_SIGNALS:
                        const QList<QContact> &modified,
                        const QList<QContact> &removed);
     void upsyncCompleted();
-    void addressbooksList(const QStringList &paths);
+    void addressbooksList(const QList<ReplyParser::AddressBookInformation> &paths);
 
 private:
+    void determineRemoteAMR();
     void fetchUserInformation();
     void fetchAddressbookUrls(const QString &userPath);
     void fetchAddressbooksInformation(const QString &addressbooksHomePath);
-    void downsyncAddressbookContent(const QList<ReplyParser::AddressBookInformation> &infos);
-    void fetchImmediateDelta(const QString &addressbookUrl, const QString &syncToken);
-    void fetchContactMetadata(const QString &addressbookUrl);
+    bool fetchImmediateDelta(const QString &addressbookUrl, const QString &syncToken);
+    bool fetchContactMetadata(const QString &addressbookUrl);
     void fetchContacts(const QString &addressbookUrl, const QList<ReplyParser::ContactInformation> &amrInfo);
 
 private Q_SLOTS:
@@ -92,13 +97,12 @@ private Q_SLOTS:
     void immediateDeltaResponse();
     void contactMetadataResponse();
     void contactsResponse();
-    void downsyncComplete();
     void upsyncResponse();
-    void upsyncComplete();
+    void upsyncComplete(const QString &addressbookUrl);
     void errorOccurred(int httpError);
 
 private:
-    void contactAddModsComplete(const QString &addressbookUrl);
+    void calculateContactChanges(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified);
 
     enum DiscoveryStage {
         DiscoveryStarted = 0,
@@ -116,11 +120,12 @@ private:
     bool m_addressbooksListOnly;
     bool m_triedAddressbookPathAsHomeSetUrl;
 
-    QList<QContact> m_remoteAdditions;
-    QList<QContact> m_remoteModifications;
-    QList<QContact> m_remoteRemovals;
-    int m_downsyncRequests;
-    int m_upsyncRequests;
+    struct UpsyncedContacts {
+        QList<QContact> additions;
+        QList<QContact> modifications;
+    };
+    QHash<QString, UpsyncedContacts> m_upsyncedChanges;
+    QHash<QString, int> m_upsyncRequests;
 };
 
 class CardDavVCardConverter : public QVersitContactImporterPropertyHandlerV2,

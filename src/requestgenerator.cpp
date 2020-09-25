@@ -213,6 +213,7 @@ QNetworkReply *RequestGenerator::addressbooksInformation(const QString &serverUr
           "<d:prop>"
              "<d:resourcetype />"
              "<d:displayname />"
+             "<d:current-user-privilege-set />"
              "<d:sync-token />"
              "<cs:getctag />"
           "</d:prop>"

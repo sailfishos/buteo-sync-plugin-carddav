@@ -30,6 +30,11 @@
 
 #include <QContact>
 
+static const QString KEY_CTAG = QStringLiteral("ctag");
+static const QString KEY_SYNCTOKEN = QStringLiteral("syncToken");
+static const QString KEY_ETAG = QStringLiteral("etag");
+static const QString KEY_UNSUPPORTEDPROPERTIES = QStringLiteral("unsupportedProperties");
+
 QTCONTACTS_USE_NAMESPACE
 
 class CardDavVCardConverter;
@@ -43,6 +48,7 @@ public:
         QString displayName;
         QString ctag;
         QString syncToken;
+        bool readOnly = false;
     };
 
     class ContactInformation {
@@ -51,12 +57,12 @@ public:
             Uninitialized = 0,
             Addition,
             Modification,
-            Deletion
+            Deletion,
+            Unmodified
         };
         ContactInformation() : modType(Uninitialized) {}
         ModificationType modType;
         QString uri;
-        QString guid; // this is the prefixed form of the UID (accountNumber:UID)
         QString etag;
     };
 
@@ -80,9 +86,9 @@ public:
     QString parseUserPrincipal(const QByteArray &userInformationResponse, ResponseType *responseType) const;
     QString parseAddressbookHome(const QByteArray &addressbookUrlsResponse) const;
     QList<AddressBookInformation> parseAddressbookInformation(const QByteArray &addressbookInformationResponse, const QString &addressbooksHomePath) const;
-    QList<ContactInformation> parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, QString *newSyncToken) const;
-    QList<ContactInformation> parseContactMetadata(const QByteArray &contactMetadataResponse, const QString &addresbookUrl) const;
-    QMap<QString, FullContactInformation> parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const;
+    QList<ContactInformation> parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, const QString &addressbookUrl, QString *newSyncToken) const;
+    QList<ContactInformation> parseContactMetadata(const QByteArray &contactMetadataResponse, const QString &addressbookUrl, const QHash<QString, QString> &contactUriToEtag) const;
+    QHash<QString, QContact> parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const;
 
 private:
     Syncer *q;

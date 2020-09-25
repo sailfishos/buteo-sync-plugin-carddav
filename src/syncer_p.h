@@ -25,7 +25,7 @@
 
 #include "replyparser_p.h"
 
-#include <twowaycontactsyncadapter.h>
+#include <twowaycontactsyncadaptor.h>
 
 #include <QObject>
 #include <QDateTime>
@@ -36,6 +36,7 @@
 
 #include <QContactManager>
 #include <QContact>
+#include <QContactCollection>
 
 QTCONTACTS_USE_NAMESPACE
 
@@ -46,12 +47,12 @@ class CardDav;
 class RequestGenerator;
 namespace Buteo { class SyncProfile; }
 
-class Syncer : public QObject, public QtContactsSqliteExtensions::TwoWayContactSyncAdapter
+class Syncer : public QObject, public QtContactsSqliteExtensions::TwoWayContactSyncAdaptor
 {
     Q_OBJECT
 
 public:
-    Syncer(QObject *parent, Buteo::SyncProfile *profile);
+    Syncer(QObject *parent, Buteo::SyncProfile *profile, int accountId);
    ~Syncer();
 
     void startSync(int accountId);
@@ -64,31 +65,34 @@ Q_SIGNALS:
 
 protected:
     // implementing the TWCSA interface
-    bool testAccountProvenance(const QContact &contact, const QString &accountId);
-    void determineRemoteChanges(const QDateTime &remoteSince,
-                                const QString &accountId);
-    void upsyncLocalChanges(const QDateTime &localSince,
-                            const QList<QContact> &locallyAdded,
-                            const QList<QContact> &locallyModified,
-                            const QList<QContact> &locallyDeleted,
-                            const QString &accountId);
-
-private:
-    bool readExtraStateData(int accountId);
-    bool storeExtraStateData(int accountId);
-    bool purgeExtraStateData(int accountId);
+    bool determineRemoteCollections();
+    bool determineRemoteCollectionChanges(
+        const QList<QContactCollection> &locallyAddedCollections,
+        const QList<QContactCollection> &locallyModifiedCollections,
+        const QList<QContactCollection> &locallyRemovedCollections,
+        const QList<QContactCollection> &locallyUnmodifiedCollections,
+        QContactManager::Error *error);
+    bool determineRemoteContacts(const QContactCollection &collection);
+    bool determineRemoteContactChanges(
+            const QContactCollection &collection,
+            const QList<QContact> &localAddedContacts,
+            const QList<QContact> &localModifiedContacts,
+            const QList<QContact> &localDeletedContacts,
+            const QList<QContact> &localUnmodifiedContacts,
+            QContactManager::Error *error);
+    bool deleteRemoteCollection(const QContactCollection &collection);
+    bool storeLocalChangesRemotely(
+            const QContactCollection &collection,
+            const QList<QContact> &addedContacts,
+            const QList<QContact> &modifiedContacts,
+            const QList<QContact> &deletedContacts);
+    void syncFinishedSuccessfully();
+    void syncFinishedWithError();
 
 private Q_SLOTS:
     void sync(const QString &serverUrl, const QString &addressbookPath, const QString &username, const QString &password, const QString &accessToken, bool ignoreSslErrors);
-    void continueSync(const QList<QContact> &added, const QList<QContact> &modified, const QList<QContact> &removed);
-    void syncFinished();
     void signInError();
     void cardDavError(int errorCode = 0);
-
-private:
-    bool significantDifferences(QContact *a, QContact *b) const;
-    void migrateGuidData(const QString &oldguid, const QString &newguid, const QString &addressbookUrl);
-    void clearAllGuidData(); // used by the unit test only.
 
 private:
     friend class CardDav;
@@ -112,24 +116,25 @@ private:
     QString m_accessToken;
     bool m_ignoreSslErrors;
 
-    // transient
-    QString m_defaultAddressbook;
-    QMap<QString, QMap<QString, int> > m_serverAdditionIndices;     // uri to index into m_serverAdditions
-    QMap<QString, QMap<QString, int> > m_serverModificationIndices; // uti to index into m_serverModifications
-    QMap<QString, QList<ReplyParser::ContactInformation> > m_serverAdditions;     // contacts added server-side, per addressbook.
-    QMap<QString, QList<ReplyParser::ContactInformation> > m_serverModifications; // contacts modified server-side, per addressbook.
-    QMap<QString, QList<ReplyParser::ContactInformation> > m_serverDeletions;     // contacts deleted server-side, per addressbook.
-    QMultiMap<QString, QPair<QString, QContact> > m_serverAddModsByUid; // uid to <addressbookUrl, QContact>, for duplicate detection.
+    // the ctag and sync token for each particular addressbook, as stored during the previous sync cycle.
+    QHash<QString, QPair<QString, QString> > m_previousCtagSyncToken; // uri to ctag+synctoken.
+    QHash<QString, QContactCollection> m_currentCollections;
+    QHash<QString, QHash<QString, QString> > m_localContactUrisEtags;
 
-    // loaded from OOB data.
-    QMap<QString, QStringList> m_addressbookContactGuids; // addressbookUrl to list of contact guids
-    QMap<QString, QString> m_addressbookCtags;
-    QMap<QString, QString> m_addressbookSyncTokens;
-    QMap<QString, QString> m_contactUids;  // contact guid -> contact UID
-    QMap<QString, QString> m_contactUris;  // contact guid -> contact uri
-    QMap<QString, QString> m_contactEtags; // contact guid -> contact etag
-    QMap<QString, QString> m_contactIds;   // contact guid -> contact id
-    QMap<QString, QStringList> m_contactUnsupportedProperties; // contact guid -> prop strings
+    // colletion uri to contact uri (sync target) to contact info
+    QHash<QString, QHash<QString, ReplyParser::ContactInformation> > m_remoteAdditions;
+    QHash<QString, QHash<QString, ReplyParser::ContactInformation> > m_remoteModifications;
+    QHash<QString, QHash<QString, ReplyParser::ContactInformation> > m_remoteRemovals;
+    QHash<QString, QHash<QString, ReplyParser::ContactInformation> > m_remoteUnmodified;
+
+    // for change detection
+    struct AMRU {
+        QList<QContact> added;
+        QList<QContact> modified;
+        QList<QContact> removed;
+        QList<QContact> unmodified;
+    };
+    QHash<QString, AMRU> m_collectionAMRU; // collection uri to AMRU
 };
 
 #endif // SYNCER_P_H

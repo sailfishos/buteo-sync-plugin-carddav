@@ -79,7 +79,7 @@ bool CardDavClient::init()
     m_syncDirection = iProfile.syncDirection();
     m_conflictResPolicy = iProfile.conflictResolutionPolicy();
     if (!m_syncer) {
-        m_syncer = new Syncer(this, &iProfile);
+        m_syncer = new Syncer(this, &iProfile, m_accountId);
         connect(m_syncer, SIGNAL(syncSucceeded()),
                 this, SLOT(syncSucceeded()));
         connect(m_syncer, SIGNAL(syncFailed()),
@@ -165,7 +165,7 @@ bool CardDavClient::cleanUp()
         return false;
     }
 
-    if (!m_syncer) m_syncer = new Syncer(this, &iProfile);
+    if (!m_syncer) m_syncer = new Syncer(this, &iProfile, m_accountId);
     m_syncer->purgeAccount(m_accountId);
     delete m_syncer;
     m_syncer = 0;
