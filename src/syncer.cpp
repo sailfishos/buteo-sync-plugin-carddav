@@ -222,7 +222,9 @@ bool Syncer::determineRemoteCollectionChanges(
                             remotelyModifiedCollections.append(remoteMod);
                         } else {
                             // we assume that the remote collection is unmodified.
-                            remotelyUnmodifiedCollections.append(remoteCollections.take(path));
+                            remoteCollections.remove(path);
+                            QContactCollection remoteUnmod = local; // need id etc.
+                            remotelyUnmodifiedCollections.append(remoteUnmod);
                         }
                     }
                 }
