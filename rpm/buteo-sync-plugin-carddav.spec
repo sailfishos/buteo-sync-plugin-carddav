@@ -1,6 +1,6 @@
 Name:       buteo-sync-plugin-carddav
 Summary:    Syncs contact data from CardDAV services
-Version:    0.1.2
+Version:    0.1.3
 Release:    1
 License:    LGPLv2
 URL:        https://git.sailfishos.org/mer-core/buteo-sync-plugin-carddav
