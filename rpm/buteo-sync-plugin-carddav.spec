@@ -19,8 +19,6 @@ BuildRequires:  pkgconfig(libsignon-qt5)
 BuildRequires:  pkgconfig(libsailfishkeyprovider)
 BuildRequires:  pkgconfig(qtcontacts-sqlite-qt5-extensions) >= 0.3.0
 BuildRequires:  pkgconfig(contactcache-qt5) >= 0.3.0
-BuildRequires:  pkgconfig(libkcalcoren-qt5)
-BuildRequires:  pkgconfig(libmkcal-qt5)
 Requires: buteo-syncfw-qt5-msyncd
 
 %description
