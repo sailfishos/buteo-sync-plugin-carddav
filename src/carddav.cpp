@@ -601,34 +601,39 @@ void CardDav::userInformationResponse()
     QUrl redir = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();
     if (!redir.isEmpty()) {
         QUrl orig = reply->url();
-        if (orig.path() != redir.path()) {
-            if (orig.path().endsWith(QStringLiteral(".well-known/carddav"))) {
-                // redirect as required, and change our server URL to point to the redirect URL.
-                LOG_DEBUG(Q_FUNC_INFO << "redirecting from:" << orig.toString() << "to:" << redir.toString());
-                QString redirPort;
-                if (redir.port() != -1) {
-                    // the redirect was a url, and includes a port.  use it.
-                    redirPort = QStringLiteral(":%1").arg(redir.port());
-                } else if (redir.host().isEmpty() && orig.port() != -1) {
-                    // the redirect was a path, not a url.  use the original port.
-                    redirPort = QStringLiteral(":%1").arg(orig.port());
-                }
-                m_serverUrl = QStringLiteral("%1://%2%3%4")
-                        .arg(redir.scheme().isEmpty() ? orig.scheme() : redir.scheme())
-                        .arg(redir.host().isEmpty() ? orig.host() : redir.host())
-                        .arg(redirPort)
-                        .arg(redir.path());
-                m_discoveryStage = CardDav::DiscoveryRedirected;
-                fetchUserInformation();
-            } else {
-                // possibly unsafe redirect.  for security, assume it's malicious and abort sync.
-                LOG_WARNING(Q_FUNC_INFO << "unexpected redirect from:" << orig.toString() << "to:" << redir.toString());
-                errorOccurred(301);
-            }
-        } else {
+        LOG_DEBUG(Q_FUNC_INFO << "server requested redirect from:" << orig.toString() << "to:" << redir.toString());
+        const bool hostChanged = orig.host() != redir.host();
+        const bool pathChanged = orig.path() != redir.path();
+        const bool schemeChanged = orig.scheme() != redir.scheme();
+        const bool portChanged = orig.port() != redir.port();
+        const bool validPathRedirect = orig.path().endsWith(QStringLiteral(".well-known/carddav"))
+                                    || orig.path() == redir.path(); // e.g. scheme change.
+        if (!hostChanged && !pathChanged && !schemeChanged && !portChanged) {
             // circular redirect, avoid the endless loop by aborting sync.
             LOG_WARNING(Q_FUNC_INFO << "redirect specified is circular:" << redir.toString());
             errorOccurred(301);
+        } else if (hostChanged || !validPathRedirect) {
+            // possibly unsafe redirect.  for security, assume it's malicious and abort sync.
+            LOG_WARNING(Q_FUNC_INFO << "unexpected redirect from:" << orig.toString() << "to:" << redir.toString());
+            errorOccurred(301);
+        } else {
+            // redirect as required, and change our server URL to point to the redirect URL.
+            LOG_DEBUG(Q_FUNC_INFO << "redirecting from:" << orig.toString() << "to:" << redir.toString());
+            QString redirPort;
+            if (redir.port() != -1) {
+                // the redirect was a url, and includes a port.  use it.
+                redirPort = QStringLiteral(":%1").arg(redir.port());
+            } else if (redir.host().isEmpty() && orig.port() != -1) {
+                // the redirect was a path, not a url.  use the original port.
+                redirPort = QStringLiteral(":%1").arg(orig.port());
+            }
+            m_serverUrl = QStringLiteral("%1://%2%3%4")
+                    .arg(redir.scheme().isEmpty() ? orig.scheme() : redir.scheme())
+                    .arg(redir.host().isEmpty() ? orig.host() : redir.host())
+                    .arg(redirPort)
+                    .arg(redir.path());
+            m_discoveryStage = CardDav::DiscoveryRedirected;
+            fetchUserInformation();
         }
         return;
     }
