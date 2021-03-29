@@ -1,7 +1,7 @@
 /*
  * This file is part of buteo-sync-plugin-carddav package
  *
- * Copyright (C) 2014 Jolla Ltd. and/or its subsidiary(-ies).
+ * Copyright (C) 2014 - 2021 Jolla Ltd. and/or its subsidiary(-ies).
  *
  * Contributors: Chris Adams <chris.adams@jolla.com>
  *
@@ -28,17 +28,14 @@
 #include <ProfileEngineDefs.h>
 #include <ProfileManager.h>
 
-extern "C" CardDavClient* createPlugin(const QString& aPluginName,
-                                       const Buteo::SyncProfile& aProfile,
-                                       Buteo::PluginCbInterface *aCbInterface)
+Buteo::ClientPlugin* CardDavClientLoader::createClientPlugin(
+        const QString& pluginName,
+        const Buteo::SyncProfile& profile,
+        Buteo::PluginCbInterface* cbInterface)
 {
-    return new CardDavClient(aPluginName, aProfile, aCbInterface);
+    return new CardDavClient(pluginName, profile, cbInterface);
 }
 
-extern "C" void destroyPlugin(CardDavClient *aClient)
-{
-    delete aClient;
-}
 
 CardDavClient::CardDavClient(const QString& aPluginName,
                             const Buteo::SyncProfile& aProfile,
