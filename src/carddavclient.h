@@ -1,7 +1,7 @@
 /*
  * This file is part of buteo-sync-plugin-carddav package
  *
- * Copyright (C) 2014 Jolla Ltd. and/or its subsidiary(-ies).
+ * Copyright (C) 2014 - 2021 Jolla Ltd. and/or its subsidiary(-ies).
  *
  * Contributors: Chris Adams <chris.adams@jolla.com>
  *
@@ -27,6 +27,7 @@
 #include <SyncProfile.h>
 #include <SyncResults.h>
 #include <SyncCommonDefs.h>
+#include <SyncPluginLoader.h>
 
 #include <QString>
 #include <QObject>
@@ -71,21 +72,23 @@ private:
     int                         m_accountId;
 };
 
-/*! \brief Creates CardDav client plugin
- *
- * @param aPluginName Name of this client plugin
- * @param aProfile Profile to use
- * @param aCbInterface Pointer to the callback interface
- * @return Client plugin on success, otherwise NULL
- */
-extern "C" CardDavClient* createPlugin(const QString &aPluginName,
-                                      const Buteo::SyncProfile &aProfile,
-                                      Buteo::PluginCbInterface *aCbInterface);
+class CardDavClientLoader : public Buteo::SyncPluginLoader
+{
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID "org.sailfishos.plugins.sync.CardDavClientLoader")
+    Q_INTERFACES(Buteo::SyncPluginLoader)
 
-/*! \brief Destroys CardDav client plugin
- *
- * @param aClient CardDav client plugin instance to destroy
- */
-extern "C" void destroyPlugin(CardDavClient *aClient);
+public:
+    /*! \brief Creates CardDav client plugin
+     *
+     * @param aPluginName Name of this client plugin
+     * @param aProfile Profile to use
+     * @param aCbInterface Pointer to the callback interface
+     * @return Client plugin on success, otherwise NULL
+     */
+    Buteo::ClientPlugin* createClientPlugin(const QString& pluginName,
+                                            const Buteo::SyncProfile& profile,
+                                            Buteo::PluginCbInterface* cbInterface) override;
+};
 
 #endif // CARDDAVCLIENT_H

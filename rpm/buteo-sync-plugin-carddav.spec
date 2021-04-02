@@ -13,7 +13,7 @@ BuildRequires:  pkgconfig(Qt5Network)
 BuildRequires:  pkgconfig(Qt5Contacts)
 BuildRequires:  pkgconfig(Qt5Versit)
 BuildRequires:  pkgconfig(mlite5)
-BuildRequires:  pkgconfig(buteosyncfw5)
+BuildRequires:  pkgconfig(buteosyncfw5) >= 0.10.0
 BuildRequires:  pkgconfig(accounts-qt5) >= 1.13
 BuildRequires:  pkgconfig(libsignon-qt5)
 BuildRequires:  pkgconfig(libsailfishkeyprovider)
@@ -34,10 +34,7 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 
 %files
 %defattr(-,root,root,-)
-#out-of-process-plugin
-%{_libdir}/buteo-plugins-qt5/oopp/carddav-client
-#in-process-plugin
-#%%{_libdir}/buteo-plugins-qt5/libcarddav-client.so
+%{_libdir}/buteo-plugins-qt5/oopp/libcarddav-client.so
 %config %{_sysconfdir}/buteo/profiles/client/carddav.xml
 %config %{_sysconfdir}/buteo/profiles/sync/carddav.Contacts.xml
 %license LICENSE
@@ -82,7 +79,7 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 %autosetup -n %{name}-%{version}
 
 %build
-%qmake5 "DEFINES+=BUTEO_OUT_OF_PROCESS_SUPPORT" "CONFIG+=build-tools"
+%qmake5 "CONFIG+=build-tools"
 %make_build
 
 %pre
