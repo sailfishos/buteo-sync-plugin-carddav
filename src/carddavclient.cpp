@@ -58,7 +58,7 @@ void CardDavClient::connectivityStateChanged(Sync::ConnectivityType aType, bool 
     LOG_DEBUG("Received connectivity change event:" << aType << " changed to " << aState);
     if (aType == Sync::CONNECTIVITY_INTERNET && !aState) {
         // we lost connectivity during sync.
-        abortSync(Sync::SYNC_CONNECTION_ERROR);
+        abortSync(Buteo::SyncResults::CONNECTION_ERROR);
     }
 }
 
@@ -112,20 +112,14 @@ void CardDavClient::syncFailed()
     syncFinished(Buteo::SyncResults::INTERNAL_ERROR, QString());
 }
 
-void CardDavClient::abortSync(Sync::SyncStatus aStatus)
-{
-    FUNCTION_CALL_TRACE;
-    abort(aStatus);
-}
-
-void CardDavClient::abort(Sync::SyncStatus status)
+void CardDavClient::abortSync(Buteo::SyncResults::MinorCode code)
 {
     FUNCTION_CALL_TRACE;
     m_syncer->abortSync();
-    syncFinished(status, QStringLiteral("Sync aborted"));
+    syncFinished(code, QStringLiteral("Sync aborted"));
 }
 
-void CardDavClient::syncFinished(int minorErrorCode, const QString &message)
+void CardDavClient::syncFinished(Buteo::SyncResults::MinorCode minorErrorCode, const QString &message)
 {
     FUNCTION_CALL_TRACE;
 
