@@ -56,7 +56,7 @@
 #include <Accounts/Account>
 
 #include <SyncProfile.h>
-#include <LogMacros.h>
+#include "logging.h"
 
 #define CARDDAV_CONTACTS_APPLICATION QLatin1String("carddav")
 static const int HTTP_UNAUTHORIZED_ACCESS = 401;
@@ -96,7 +96,7 @@ void Syncer::startSync(int accountId)
             this, SLOT(sync(QString,QString,QString,QString,QString,bool)));
     connect(m_auth, SIGNAL(signInError()),
             this, SLOT(signInError()));
-    LOG_DEBUG(Q_FUNC_INFO << "starting carddav sync with account" << m_accountId);
+    qCDebug(lcCardDav) << Q_FUNC_INFO << "starting carddav sync with account" << m_accountId;
     m_auth->signIn(accountId);
 }
 
@@ -120,10 +120,10 @@ void Syncer::sync(const QString &serverUrl, const QString &addressbookPath, cons
     connect(m_cardDav, &CardDav::error,
             this, &Syncer::cardDavError);
 
-    LOG_DEBUG("CardDAV Sync adapter initialised for account" << m_accountId << ", starting sync...");
+    qCDebug(lcCardDav) << "CardDAV Sync adapter initialised for account" << m_accountId << ", starting sync...";
 
     if (!TwoWayContactSyncAdaptor::startSync(TwoWayContactSyncAdaptor::ContinueAfterError)) {
-        LOG_DEBUG("Unable to start CardDAV sync!");
+        qCDebug(lcCardDav) << "Unable to start CardDAV sync!";
     }
 }
 
@@ -321,7 +321,7 @@ bool Syncer::determineRemoteContactChanges(
 bool Syncer::deleteRemoteCollection(const QContactCollection &)
 {
     // TODO: implement this.
-    LOG_WARNING(Q_FUNC_INFO << "delete remote collection operation not supported for carddav!");
+    qCWarning(lcCardDav) << Q_FUNC_INFO << "delete remote collection operation not supported for carddav!";
     return true;
 }
 
@@ -343,7 +343,7 @@ bool Syncer::storeLocalChangesRemotely(
 
 void Syncer::syncFinishedSuccessfully()
 {
-    LOG_DEBUG(Q_FUNC_INFO << "CardDAV sync with account" << m_accountId << "finished successfully!");
+    qCDebug(lcCardDav) << Q_FUNC_INFO << "CardDAV sync with account" << m_accountId << "finished successfully!";
     emit syncSucceeded();
 }
 
@@ -354,7 +354,7 @@ void Syncer::syncFinishedWithError()
 
 void Syncer::cardDavError(int errorCode)
 {
-    LOG_WARNING("CardDAV sync for account: " << m_accountId << " finished with error:" << errorCode);
+    qCWarning(lcCardDav) << "CardDAV sync for account: " << m_accountId << " finished with error:" << errorCode;
     m_syncError = true;
     if (errorCode == HTTP_UNAUTHORIZED_ACCESS) {
         m_auth->setCredentialsNeedUpdate(m_accountId);
@@ -368,7 +368,7 @@ void Syncer::purgeAccount(int accountId)
     QtContactsSqliteExtensions::ContactManagerEngine *cme = QtContactsSqliteExtensions::contactManagerEngine(m_contactManager);
     QList<QContactCollection> added, modified, deleted, unmodified;
     if (!cme->fetchCollectionChanges(accountId, QString(), &added, &modified, &deleted, &unmodified, &err)) {
-        LOG_WARNING("Unable to retrieve CardDAV collections for purged account: " << m_accountId);
+        qCWarning(lcCardDav) << "Unable to retrieve CardDAV collections for purged account: " << m_accountId;
         return;
     }
 
@@ -381,9 +381,9 @@ void Syncer::purgeAccount(int accountId)
     if (purge.size() && !cme->storeChanges(nullptr, nullptr, purge,
             QtContactsSqliteExtensions::ContactManagerEngine::PreserveLocalChanges,
             true, &err)) {
-        LOG_WARNING("Unable to delete CardDAV collections for purged account: " << m_accountId);
+        qCWarning(lcCardDav) << "Unable to delete CardDAV collections for purged account: " << m_accountId;
         return;
     }
 
-    LOG_DEBUG(Q_FUNC_INFO << "Purged contacts for account: " << accountId);
+    qCDebug(lcCardDav) << Q_FUNC_INFO << "Purged contacts for account: " << accountId;
 }

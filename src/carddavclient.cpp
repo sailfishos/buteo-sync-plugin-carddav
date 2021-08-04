@@ -24,7 +24,7 @@
 #include "syncer_p.h"
 
 #include <PluginCbInterface.h>
-#include <LogMacros.h>
+#include "logging.h"
 #include <ProfileEngineDefs.h>
 #include <ProfileManager.h>
 
@@ -44,18 +44,18 @@ CardDavClient::CardDavClient(const QString& aPluginName,
     , m_syncer(0)
     , m_accountId(0)
 {
-    FUNCTION_CALL_TRACE;
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
 }
 
 CardDavClient::~CardDavClient()
 {
-    FUNCTION_CALL_TRACE;
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
 }
 
 void CardDavClient::connectivityStateChanged(Sync::ConnectivityType aType, bool aState)
 {
-    FUNCTION_CALL_TRACE;
-    LOG_DEBUG("Received connectivity change event:" << aType << " changed to " << aState);
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
+    qCDebug(lcCardDav) << "Received connectivity change event:" << aType << " changed to " << aState;
     if (aType == Sync::CONNECTIVITY_INTERNET && !aState) {
         // we lost connectivity during sync.
         abortSync(Buteo::SyncResults::CONNECTION_ERROR);
@@ -64,12 +64,12 @@ void CardDavClient::connectivityStateChanged(Sync::ConnectivityType aType, bool 
 
 bool CardDavClient::init()
 {
-    FUNCTION_CALL_TRACE;
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
 
     QString accountIdString = iProfile.key(Buteo::KEY_ACCOUNT_ID);
     m_accountId = accountIdString.toInt();
     if (m_accountId == 0) {
-        LOG_CRITICAL("profile does not specify" << Buteo::KEY_ACCOUNT_ID);
+        qCCritical(lcCardDav) << "profile does not specify" << Buteo::KEY_ACCOUNT_ID;
         return false;
     }
 
@@ -88,7 +88,7 @@ bool CardDavClient::init()
 
 bool CardDavClient::uninit()
 {
-    FUNCTION_CALL_TRACE;
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
     delete m_syncer;
     m_syncer = 0;
     return true;
@@ -96,7 +96,7 @@ bool CardDavClient::uninit()
 
 bool CardDavClient::startSync()
 {
-    FUNCTION_CALL_TRACE;
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
     if (m_accountId == 0) return false;
     m_syncer->startSync(m_accountId);
     return true;
@@ -114,23 +114,23 @@ void CardDavClient::syncFailed()
 
 void CardDavClient::abortSync(Buteo::SyncResults::MinorCode code)
 {
-    FUNCTION_CALL_TRACE;
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
     m_syncer->abortSync();
     syncFinished(code, QStringLiteral("Sync aborted"));
 }
 
 void CardDavClient::syncFinished(Buteo::SyncResults::MinorCode minorErrorCode, const QString &message)
 {
-    FUNCTION_CALL_TRACE;
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
 
     if (minorErrorCode == Buteo::SyncResults::NO_ERROR) {
-        LOG_DEBUG("CardDAV sync succeeded!" << message);
+        qCDebug(lcCardDav) << "CardDAV sync succeeded!" << message;
         m_results = Buteo::SyncResults(QDateTime::currentDateTimeUtc(),
                                        Buteo::SyncResults::SYNC_RESULT_SUCCESS,
                                        Buteo::SyncResults::NO_ERROR);
         emit success(getProfileName(), message);
     } else {
-        LOG_CRITICAL("CardDAV sync failed:" << minorErrorCode << message);
+        qCCritical(lcCardDav) << "CardDAV sync failed:" << minorErrorCode << message;
         m_results = Buteo::SyncResults(iProfile.lastSuccessfulSyncTime(), // don't change the last sync time
                                        Buteo::SyncResults::SYNC_RESULT_FAILED,
                                        minorErrorCode);
@@ -140,19 +140,19 @@ void CardDavClient::syncFinished(Buteo::SyncResults::MinorCode minorErrorCode, c
 
 Buteo::SyncResults CardDavClient::getSyncResults() const
 {
-    FUNCTION_CALL_TRACE;
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
     return m_results;
 }
 
 bool CardDavClient::cleanUp()
 {
-    FUNCTION_CALL_TRACE;
+    FUNCTION_CALL_TRACE(lcCardDavTrace);
 
     // This function is called after the account has been deleted.
     QString accountIdString = iProfile.key(Buteo::KEY_ACCOUNT_ID);
     m_accountId = accountIdString.toInt();
     if (m_accountId == 0) {
-        LOG_CRITICAL("profile does not specify" << Buteo::KEY_ACCOUNT_ID);
+        qCCritical(lcCardDav) << "profile does not specify" << Buteo::KEY_ACCOUNT_ID;
         return false;
     }
 

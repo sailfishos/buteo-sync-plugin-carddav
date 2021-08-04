@@ -28,7 +28,8 @@ SOURCES += \
     $$PWD/auth.cpp \
     $$PWD/carddav.cpp \
     $$PWD/requestgenerator.cpp \
-    $$PWD/replyparser.cpp
+    $$PWD/replyparser.cpp \
+    $$PWD/logging.cpp
 
 HEADERS += \
     $$EXTENSION_HEADERS \
@@ -37,7 +38,8 @@ HEADERS += \
     $$PWD/auth_p.h \
     $$PWD/carddav_p.h \
     $$PWD/requestgenerator_p.h \
-    $$PWD/replyparser_p.h
+    $$PWD/replyparser_p.h \
+    $$PWD/logging.h \
 
 OTHER_FILES += \
     $$PWD/carddav.xml \
