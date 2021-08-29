@@ -24,7 +24,7 @@
 #include "syncer_p.h"
 #include "carddav_p.h"
 
-#include <LogMacros.h>
+#include "logging.h"
 
 #include <QString>
 #include <QList>
@@ -39,7 +39,7 @@
 namespace {
     void debugDumpData(const QString &data)
     {
-        if (Buteo::Logger::instance()->getLogLevel() < 7) {
+        if (!lcCardDavProtocol().isDebugEnabled()) {
             return;
         }
 
@@ -47,7 +47,7 @@ namespace {
         Q_FOREACH (const QChar &c, data) {
             if (c == '\r' || c == '\n') {
                 if (!dbgout.isEmpty()) {
-                    LOG_DEBUG(dbgout);
+                    qCDebug(lcCardDavProtocol) << dbgout;
                     dbgout.clear();
                 }
             } else {
@@ -55,7 +55,7 @@ namespace {
             }
         }
         if (!dbgout.isEmpty()) {
-            LOG_DEBUG(dbgout);
+            qCDebug(lcCardDavProtocol) << dbgout;
         }
     }
 
@@ -167,10 +167,10 @@ QString ReplyParser::parseUserPrincipal(const QByteArray &userInformationRespons
     QString ctag = response.value("propstat").toMap().value("prop").toMap().value("getctag").toMap().value("@text").toString();
 
     if (!statusText.contains(QLatin1String("200 OK"))) {
-        LOG_WARNING(Q_FUNC_INFO << "invalid status response to current user information request:" << statusText);
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "invalid status response to current user information request:" << statusText;
     } else if (userPrincipal.isEmpty() && !ctag.isEmpty()) {
         // this server has responded with an addressbook information response.
-        LOG_DEBUG(Q_FUNC_INFO << "addressbook information response to current user information request:" << statusText);
+        qCDebug(lcCardDav) << Q_FUNC_INFO << "addressbook information response to current user information request:" << statusText;
         *responseType = ReplyParser::AddressbookInformationResponse;
         return QString();
     }
@@ -218,11 +218,11 @@ QString ReplyParser::parseAddressbookHome(const QByteArray &addressbookUrlsRespo
     }
 
     if (reader.hasError()) {
-        LOG_WARNING(Q_FUNC_INFO << "error parsing response to addressbook home request:" << reader.errorString());
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "error parsing response to addressbook home request:" << reader.errorString();
     }
 
     if (!statusText.contains(QLatin1String("200 OK"))) {
-        LOG_WARNING(Q_FUNC_INFO << "invalid status response to addressbook home request:" << statusText);
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "invalid status response to addressbook home request:" << statusText;
     }
 
     return addressbookHome;
@@ -282,7 +282,7 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
                 (!currInfo.url.endsWith('/') &&
                   addressbooksHomePath.endsWith('/') &&
                   currInfo.url == addressbooksHomePath.mid(0, addressbooksHomePath.size()-1)))) {
-            LOG_DEBUG("ignoring addressbook-home-set response returned for addressbook information request:" << currInfo.url);
+            qCDebug(lcCardDav) << "ignoring addressbook-home-set response returned for addressbook information request:" << currInfo.url;
             continue;
         }
 
@@ -341,15 +341,15 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
                 if (resourcetypeCalendar) {
                     // the resource is explicitly described as a calendar resource, not an addressbook.
                     addressbookResourceSpecified = StatusExplicitlyFalse;
-                    LOG_DEBUG(Q_FUNC_INFO << "have calendar resource:" << currInfo.url << ", ignoring");
+                    qCDebug(lcCardDav) << Q_FUNC_INFO << "have calendar resource:" << currInfo.url << ", ignoring";
                 } else if (resourcetypeWriteProxy || resourcetypeReadProxy) {
                     // the resource is a proxy resource, we don't support these resources.
                     addressbookResourceSpecified = StatusExplicitlyFalse;
-                    LOG_DEBUG(Q_FUNC_INFO << "have" << (resourcetypeWriteProxy ? "write" : "read") << "proxy resource:" << currInfo.url << ", ignoring");
+                    qCDebug(lcCardDav) << Q_FUNC_INFO << "have" << (resourcetypeWriteProxy ? "write" : "read") << "proxy resource:" << currInfo.url << ", ignoring";
                 } else if (resourcetypeAddressbook) {
                     // the resource is explicitly described as an addressbook resource.
                     addressbookResourceSpecified = StatusExplicitlyTrue;
-                    LOG_DEBUG(Q_FUNC_INFO << "have addressbook resource:" << currInfo.url);
+                    qCDebug(lcCardDav) << Q_FUNC_INFO << "have addressbook resource:" << currInfo.url;
                 } else if (resourcetypeCollection) {
                     if (resourceTypeKeys.size() == 1 ||
                             (resourceTypeKeys.size() == 2 && resourcetypeText) ||
@@ -359,16 +359,16 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
                         // server MUST return the 'addressbook' value in the resource types
                         // property, some CardDAV implementations (eg, Memotoo, Kerio) do not.
                         addressbookResourceSpecified = StatusUnknown;
-                        LOG_DEBUG(Q_FUNC_INFO << "have probable addressbook resource:" << currInfo.url);
+                        qCDebug(lcCardDav) << Q_FUNC_INFO << "have probable addressbook resource:" << currInfo.url;
                     } else {
                         // we don't know how to handle this resource type.
                         addressbookResourceSpecified = StatusExplicitlyFalse;
-                        LOG_DEBUG(Q_FUNC_INFO << "have unknown" << (resourcetypePrincipal ? "principal" : "") << "non-addressbook collection resource:" << currInfo.url);
+                        qCDebug(lcCardDav) << Q_FUNC_INFO << "have unknown" << (resourcetypePrincipal ? "principal" : "") << "non-addressbook collection resource:" << currInfo.url;
                     }
                 } else {
                     // we don't know how to handle this resource type.
                     addressbookResourceSpecified = StatusExplicitlyFalse;
-                    LOG_DEBUG(Q_FUNC_INFO << "have unknown" << (resourcetypePrincipal ? "principal" : "") << "non-collection resource:" << currInfo.url);
+                    qCDebug(lcCardDav) << Q_FUNC_INFO << "have unknown" << (resourcetypePrincipal ? "principal" : "") << "non-collection resource:" << currInfo.url;
                 }
             }
             // Some services (e.g. Cozy) return multiple propstats
@@ -387,9 +387,9 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
                         resourcetypeStatus = StatusExplicitly2xxOk; // explicitly ok
                     } else {
                         resourcetypeStatus = StatusExplicitlyNotOk; // explicitly not ok
-                        LOG_DEBUG(Q_FUNC_INFO << "response has non-OK status:" << status
+                        qCDebug(lcCardDav) << Q_FUNC_INFO << "response has non-OK status:" << status
                                               << "for properties:" << prop.keys()
-                                              << "for url:" << currInfo.url);
+                                              << "for url:" << currInfo.url;
                     }
                 } else {
                     // This status applies to some other property.
@@ -400,9 +400,9 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
                         otherPropertyStatus = StatusExplicitly2xxOk; // explicitly ok
                     } else {
                         otherPropertyStatus = StatusExplicitlyNotOk; // explicitly not ok
-                        LOG_DEBUG(Q_FUNC_INFO << "response has non-OK status:" << status
+                        qCDebug(lcCardDav) << Q_FUNC_INFO << "response has non-OK status:" << status
                                               << "for non-resourcetype properties:" << prop.keys()
-                                              << "for url:" << currInfo.url);
+                                              << "for url:" << currInfo.url;
                     }
                 }
             }
@@ -411,35 +411,35 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
         // now check to see if we have all of the required information
         if (addressbookResourceSpecified == StatusExplicitlyTrue && resourcetypeStatus == StatusExplicitly2xxOk) {
             // we definitely had a well-specified resourcetype response, with 200 OK status.
-            LOG_DEBUG(Q_FUNC_INFO << "have addressbook resource with status OK:" << currInfo.url);
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "have addressbook resource with status OK:" << currInfo.url;
         } else if (propstats.count() == 1                          // only one response element
                 && addressbookResourceSpecified == StatusUnknown   // resource type unknown
                 && otherPropertyStatus == StatusExplicitly2xxOk) { // status was explicitly ok
             // we assume that this was an implicit Addressbook Collection resourcetype response.
             // append it to our list of possible addressbook infos, to be added if we have no "certain" addressbooks.
-            LOG_DEBUG(Q_FUNC_INFO << "have possible addressbook resource with status OK:" << currInfo.url);
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "have possible addressbook resource with status OK:" << currInfo.url;
             possibleAddressbookInfos.append(currInfo);
             continue;
         } else if (addressbookResourceSpecified == StatusUnknown
                 && resourcetypeStatus == StatusExplicitly2xxOk) {
             // workaround for Kerio servers.  The "principal" may be used as
             // the carddav addressbook url if no other urls are valid.
-            LOG_DEBUG(Q_FUNC_INFO << "have unlikely addressbook resource with status OK:" << currInfo.url);
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "have unlikely addressbook resource with status OK:" << currInfo.url;
             unlikelyAddressbookInfos.append(currInfo);
             continue;
         } else {
             // we either cannot infer that this was an Addressbook Collection
             // or we were told explicitly that the collection status was NOT OK.
-            LOG_DEBUG(Q_FUNC_INFO << "ignoring resource:" << currInfo.url << "due to type or status:"
-                                  << addressbookResourceSpecified << resourcetypeStatus << otherPropertyStatus);
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "ignoring resource:" << currInfo.url << "due to type or status:"
+                                  << addressbookResourceSpecified << resourcetypeStatus << otherPropertyStatus;
             continue;
         }
 
         // add the addressbook to our return list.  If we have no sync-token or c-tag, we do manual delta detection.
         if (currInfo.ctag.isEmpty() && currInfo.syncToken.isEmpty()) {
-            LOG_DEBUG(Q_FUNC_INFO << "addressbook:" << currInfo.url << "has no sync-token or c-tag");
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "addressbook:" << currInfo.url << "has no sync-token or c-tag";
         } else {
-            LOG_DEBUG(Q_FUNC_INFO << "found valid addressbook:" << currInfo.url << "with sync-token or c-tag");
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "found valid addressbook:" << currInfo.url << "with sync-token or c-tag";
         }
         infos.append(currInfo);
     }
@@ -447,10 +447,10 @@ QList<ReplyParser::AddressBookInformation> ReplyParser::parseAddressbookInformat
     // if the server was returning malformed response (without 'addressbook' resource type)
     // we can still use the response path as an addressbook url in some cases (e.g. Memotoo).
     if (infos.isEmpty()) {
-        LOG_DEBUG(Q_FUNC_INFO << "Have no certain addressbook resources; assuming possible resources are addressbooks!");
+        qCDebug(lcCardDav) << Q_FUNC_INFO << "Have no certain addressbook resources; assuming possible resources are addressbooks!";
         infos = possibleAddressbookInfos;
         if (infos.isEmpty()) {
-            LOG_DEBUG(Q_FUNC_INFO << "Have no possible addressbook resources; assuming unlikely resources are addressbooks!");
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "Have no possible addressbook resources; assuming unlikely resources are addressbooks!";
             infos = unlikelyAddressbookInfos;
         }
     }
@@ -523,7 +523,7 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(
             if (currInfo.uri.endsWith(QChar('/'))) {
                 // this is probably a response for the addressbook resource,
                 // rather than for a contact resource within the addressbook.
-                LOG_DEBUG(Q_FUNC_INFO << "ignoring non-contact (addressbook?) resource:" << currInfo.uri << currInfo.etag << status);
+                qCDebug(lcCardDav) << Q_FUNC_INFO << "ignoring non-contact (addressbook?) resource:" << currInfo.uri << currInfo.etag << status;
                 continue;
             } else if (currInfo.uri.length() > 5
                     && (currInfo.uri.at(currInfo.uri.length()-4) == QChar('.')
@@ -531,7 +531,7 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(
                     && !currInfo.uri.endsWith(QStringLiteral(".vcf"), Qt::CaseInsensitive)) {
                 // the uri has a file suffix like .ics or .eml rather than .vcf.
                 // this is probably not a contact resource, but instead some other file reported erroneously.
-                LOG_DEBUG(Q_FUNC_INFO << "ignoring non-contact resource:" << currInfo.uri << currInfo.etag << status);
+                qCDebug(lcCardDav) << Q_FUNC_INFO << "ignoring non-contact resource:" << currInfo.uri << currInfo.etag << status;
                 continue;
             }
             const QString oldEtag = q->m_localContactUrisEtags[addressbookUrl].value(currInfo.uri);
@@ -541,7 +541,7 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseSyncTokenDelta(
         } else if (status.contains(QLatin1String("404 Not Found"))) {
             currInfo.modType = ReplyParser::ContactInformation::Deletion;
         } else {
-            LOG_WARNING(Q_FUNC_INFO << "unknown response:" << currInfo.uri << currInfo.etag << status);
+            qCWarning(lcCardDav) << Q_FUNC_INFO << "unknown response:" << currInfo.uri << currInfo.etag << status;
         }
 
         // only append the info if some valid info was contained in the response.
@@ -612,7 +612,7 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(
         if (currInfo.uri.endsWith(QChar('/'))) {
             // this is probably a response for the addressbook resource,
             // rather than for a contact resource within the addressbook.
-            LOG_DEBUG(Q_FUNC_INFO << "ignoring non-contact (addressbook?) resource:" << currInfo.uri << currInfo.etag << status);
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "ignoring non-contact (addressbook?) resource:" << currInfo.uri << currInfo.etag << status;
             continue;
         } else if (currInfo.uri.length() > 5
                 && (currInfo.uri.at(currInfo.uri.length()-4) == QChar('.')
@@ -620,7 +620,7 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(
                 && !currInfo.uri.endsWith(QStringLiteral(".vcf"), Qt::CaseInsensitive)) {
             // the uri has a file suffix like .ics or .eml rather than .vcf.
             // this is probably not a contact resource, but instead some other file reported erroneously.
-            LOG_DEBUG(Q_FUNC_INFO << "ignoring non-contact resource:" << currInfo.uri << currInfo.etag << status);
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "ignoring non-contact resource:" << currInfo.uri << currInfo.etag << status;
             continue;
         }
 
@@ -630,21 +630,21 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(
             // the etag will have changed since the last time we saw it,
             // if the contact has been modified server-side since last sync.
             if (!contactUriToEtag.contains(currInfo.uri)) {
-                LOG_TRACE("Resource" << currInfo.uri << "was added on server with etag" << currInfo.etag << "to addressbook:" << addressbookUrl);
+                qCDebug(lcCardDavTrace) << "Resource" << currInfo.uri << "was added on server with etag" << currInfo.etag << "to addressbook:" << addressbookUrl;
                 currInfo.modType = ReplyParser::ContactInformation::Addition;
                 info.append(currInfo);
             } else if (contactUriToEtag[currInfo.uri] != currInfo.etag) {
-                LOG_TRACE("Resource" << currInfo.uri << "was modified on server in addressbook:" << addressbookUrl);
-                LOG_TRACE("Old etag:" << contactUriToEtag[currInfo.uri] << "New etag:" << currInfo.etag);
+                qCDebug(lcCardDavTrace) << "Resource" << currInfo.uri << "was modified on server in addressbook:" << addressbookUrl;
+                qCDebug(lcCardDavTrace) << "Old etag:" << contactUriToEtag[currInfo.uri] << "New etag:" << currInfo.etag;
                 currInfo.modType = ReplyParser::ContactInformation::Modification;
                 info.append(currInfo);
             } else {
-                LOG_TRACE("Resource" << currInfo.uri << "is unchanged since last sync with etag" << currInfo.etag << "in addressbook:" << addressbookUrl);
+                qCDebug(lcCardDavTrace) << "Resource" << currInfo.uri << "is unchanged since last sync with etag" << currInfo.etag << "in addressbook:" << addressbookUrl;
                 currInfo.modType = ReplyParser::ContactInformation::Unmodified;
                 info.append(currInfo);
             }
         } else {
-            LOG_WARNING(Q_FUNC_INFO << "unknown response:" << currInfo.uri << currInfo.etag << status);
+            qCWarning(lcCardDav) << Q_FUNC_INFO << "unknown response:" << currInfo.uri << currInfo.etag << status;
         }
     }
 
@@ -652,7 +652,7 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(
     for (const QString &uri : contactUriToEtag.keys()) {
         if (!seenUris.contains(uri)) {
             // this uri wasn't listed in the report, so this contact must have been deleted.
-            LOG_TRACE("Resource" << uri << "was deleted on server in addressbook:" << addressbookUrl);
+            qCDebug(lcCardDavTrace) << "Resource" << uri << "was deleted on server in addressbook:" << addressbookUrl;
             ReplyParser::ContactInformation currInfo;
             currInfo.etag = contactUriToEtag.value(uri);
             currInfo.uri = uri;
@@ -730,7 +730,7 @@ QHash<QString, QContact> ReplyParser::parseContactData(const QByteArray &contact
         QContactGuid guid = importedContact.detail<QContactGuid>();
         const QString uid = guid.guid();
         if (uid.isEmpty()) {
-            LOG_WARNING(Q_FUNC_INFO << "contact import from vcard has no UID:\n" << vcard);
+            qCWarning(lcCardDav) << Q_FUNC_INFO << "contact import from vcard has no UID:\n" << vcard;
             continue;
         }
         if (!uid.startsWith(QStringLiteral("%1:AB:%2:").arg(QString::number(q->m_accountId), addressbookUrl))) {

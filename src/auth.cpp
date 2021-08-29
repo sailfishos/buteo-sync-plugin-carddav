@@ -21,7 +21,7 @@
  */
 
 #include "auth_p.h"
-#include <LogMacros.h>
+#include "logging.h"
 #include <QDir>
 #include <QUrl>
 
@@ -67,7 +67,7 @@ void Auth::signIn(int accountId)
 {
     m_account = Accounts::Account::fromId(&m_manager, accountId, this);
     if (!m_account) {
-        LOG_WARNING(Q_FUNC_INFO << "unable to load account" << accountId);
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "unable to load account" << accountId;
         emit signInError();
         return;
     }
@@ -83,7 +83,7 @@ void Auth::signIn(int accountId)
     }
 
     if (!srv.isValid()) {
-        LOG_WARNING(Q_FUNC_INFO << "unable to find carddav service for account" << accountId);
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "unable to find carddav service for account" << accountId;
         emit signInError();
         return;
     }
@@ -92,7 +92,7 @@ void Auth::signIn(int accountId)
     Accounts::AccountService globalSrv(m_account, Accounts::Service());
     Accounts::AccountService accSrv(m_account, srv);
     if (!accSrv.isEnabled()) {
-        LOG_WARNING("Service:" << srv.name() << "is not enabled for account:" << m_account->id());
+        qCWarning(lcCardDav) << "Service:" << srv.name() << "is not enabled for account:" << m_account->id();
         emit signInError();
         return;
     }
@@ -118,7 +118,7 @@ void Auth::signIn(int accountId)
 
     m_addressbookPath = accSrv.value("addressbook_path").toString(); // optional, may be empty.
     if (m_serverUrl.isEmpty()) {
-        LOG_WARNING(Q_FUNC_INFO << "no valid server url setting in account" << accountId);
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "no valid server url setting in account" << accountId;
         emit signInError();
         return;
     }
@@ -126,7 +126,7 @@ void Auth::signIn(int accountId)
     m_ident = accSrv.authData().credentialsId() > 0 ?
         SignOn::Identity::existingIdentity(accSrv.authData().credentialsId()) : 0;
     if (!m_ident) {
-        LOG_WARNING(Q_FUNC_INFO << "no valid credentials for account" << accountId);
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "no valid credentials for account" << accountId;
         emit signInError();
         return;
     }
@@ -135,7 +135,7 @@ void Auth::signIn(int accountId)
     QString mechanism = accSrv.authData().mechanism();
     SignOn::AuthSession *session = m_ident->createSession(method);
     if (!session) {
-        LOG_WARNING(Q_FUNC_INFO << "unable to create authentication session with account" << accountId);
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "unable to create authentication session with account" << accountId;
         emit signInError();
         return;
     }
@@ -193,14 +193,14 @@ void Auth::signOnResponse(const SignOn::SessionData &response)
     } else if (!username.isEmpty() && !password.isEmpty()) {
         emit signInCompleted(m_serverUrl, m_addressbookPath, username, password, QString(), m_ignoreSslErrors);
     } else {
-        LOG_WARNING(Q_FUNC_INFO << "authentication succeeded, but couldn't find valid credentials");
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "authentication succeeded, but couldn't find valid credentials";
         emit signInError();
     }
 }
 
 void Auth::signOnError(const SignOn::Error &error)
 {
-    LOG_WARNING(Q_FUNC_INFO << "authentication error:" << error.type() << ":" << error.message());
+    qCWarning(lcCardDav) << Q_FUNC_INFO << "authentication error:" << error.type() << ":" << error.message();
     emit signInError();
     return;
 }
