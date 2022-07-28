@@ -601,6 +601,8 @@ void CardDav::userInformationResponse()
     QUrl redir = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();
     if (!redir.isEmpty()) {
         QUrl orig = reply->url();
+        // In case of a relative redirect, resolve it, so the code below does not have to take relative redirects into account
+        redir = orig.resolved(redir);
         qCDebug(lcCardDav) << Q_FUNC_INFO << "server requested redirect from:" << orig.toString() << "to:" << redir.toString();
         const bool hostChanged = orig.host() != redir.host();
         const bool pathChanged = orig.path() != redir.path();
