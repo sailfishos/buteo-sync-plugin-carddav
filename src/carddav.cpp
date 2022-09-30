@@ -602,6 +602,8 @@ void CardDav::userInformationResponse()
     QUrl redir = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();
     if (!redir.isEmpty()) {
         QUrl orig = reply->url();
+        // In case of a relative redirect, resolve it, so the code below does not have to take relative redirects into account
+        redir = orig.resolved(redir);
         qCDebug(lcCardDav) << Q_FUNC_INFO << "server requested redirect from:" << orig.toString() << "to:" << redir.toString();
         const bool hostChanged = orig.host() != redir.host();
         const bool pathChanged = orig.path() != redir.path();
@@ -620,19 +622,7 @@ void CardDav::userInformationResponse()
         } else {
             // redirect as required, and change our server URL to point to the redirect URL.
             qCDebug(lcCardDav) << Q_FUNC_INFO << "redirecting from:" << orig.toString() << "to:" << redir.toString();
-            QString redirPort;
-            if (redir.port() != -1) {
-                // the redirect was a url, and includes a port.  use it.
-                redirPort = QStringLiteral(":%1").arg(redir.port());
-            } else if (redir.host().isEmpty() && orig.port() != -1) {
-                // the redirect was a path, not a url.  use the original port.
-                redirPort = QStringLiteral(":%1").arg(orig.port());
-            }
-            m_serverUrl = QStringLiteral("%1://%2%3%4")
-                    .arg(redir.scheme().isEmpty() ? orig.scheme() : redir.scheme())
-                    .arg(redir.host().isEmpty() ? orig.host() : redir.host())
-                    .arg(redirPort)
-                    .arg(redir.path());
+            m_serverUrl = redir.url();
             m_discoveryStage = CardDav::DiscoveryRedirected;
             fetchUserInformation();
         }
