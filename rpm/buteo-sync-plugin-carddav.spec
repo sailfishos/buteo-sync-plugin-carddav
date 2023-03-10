@@ -1,9 +1,9 @@
 Name:       buteo-sync-plugin-carddav
 Summary:    Syncs contact data from CardDAV services
-Version:    0.1.4
+Version:    0.1.9
 Release:    1
 License:    LGPLv2
-URL:        https://git.sailfishos.org/mer-core/buteo-sync-plugin-carddav
+URL:        https://github.com/sailfishos/buteo-sync-plugin-carddav
 Source0:    %{name}-%{version}.tar.bz2
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Gui)
@@ -82,12 +82,6 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 %qmake5 "CONFIG+=build-tools"
 %make_build
 
-%pre
-rm -f /home/nemo/.cache/msyncd/sync/client/carddav.xml || :
-rm -f /home/nemo/.cache/msyncd/sync/carddav.Contacts.xml || :
-
 %install
 %qmake5_install
 
-%post
-systemctl-user try-restart msyncd.service || :
