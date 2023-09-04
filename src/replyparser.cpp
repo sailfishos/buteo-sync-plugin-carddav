@@ -738,13 +738,13 @@ QHash<QString, QContact> ReplyParser::parseContactData(const QByteArray &contact
             // RFC6352 only requires that the UID be unique within a single collection (addressbook).
             // So, we set the guid to be a compound of the accountId, addressbook URI and the UID.
             guid.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid));
-            importedContact.saveDetail(&guid, QContact::IgnoreAccessConstraints);
+            importedContact.saveDetail(&guid);
         }
 
         // store the sync target of the contact
         QContactSyncTarget syncTarget = importedContact.detail<QContactSyncTarget>();
         syncTarget.setSyncTarget(uri);
-        importedContact.saveDetail(&syncTarget, QContact::IgnoreAccessConstraints);
+        importedContact.saveDetail(&syncTarget);
 
         // store the etag into the contact
         QContactExtendedDetail etagDetail;
@@ -756,7 +756,7 @@ QHash<QString, QContact> ReplyParser::parseContactData(const QByteArray &contact
         }
         etagDetail.setName(KEY_ETAG);
         etagDetail.setData(etag);
-        importedContact.saveDetail(&etagDetail, QContact::IgnoreAccessConstraints);
+        importedContact.saveDetail(&etagDetail);
 
         // store unsupported properties into the contact.
         QContactExtendedDetail unsupportedPropertiesDetail;
@@ -768,7 +768,7 @@ QHash<QString, QContact> ReplyParser::parseContactData(const QByteArray &contact
         }
         unsupportedPropertiesDetail.setName(KEY_UNSUPPORTEDPROPERTIES);
         unsupportedPropertiesDetail.setData(result.second);
-        importedContact.saveDetail(&unsupportedPropertiesDetail, QContact::IgnoreAccessConstraints);
+        importedContact.saveDetail(&unsupportedPropertiesDetail);
 
         // and insert into the return map.
         uriToContactData.insert(uri, importedContact);

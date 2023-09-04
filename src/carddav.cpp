@@ -175,14 +175,14 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
                 // duplicated REV field seen from vCard.
                 // remove this duplicate, else save will fail.
                 QContactTimestamp dupRev(d);
-                importedContact.removeDetail(&dupRev, QContact::IgnoreAccessConstraints);
+                importedContact.removeDetail(&dupRev);
                 qCDebug(lcCardDav) << "Removed duplicate REV detail:" << dupRev;
                 QContactTimestamp firstRev = importedContact.detail<QContactTimestamp>();
                 if (dupRev.lastModified().isValid()
                         && (!firstRev.lastModified().isValid()
                             || dupRev.lastModified() > firstRev.lastModified())) {
                     firstRev.setLastModified(dupRev.lastModified());
-                    importedContact.saveDetail(&firstRev, QContact::IgnoreAccessConstraints);
+                    importedContact.saveDetail(&firstRev);
                 }
             } else {
                 seenUniqueDetailTypes.insert(QContactDetail::TypeTimestamp);
@@ -217,11 +217,11 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
             if (nameDetail.isEmpty()) {
                 nameDetail.setCustomLabel(displaylabelField);
             }
-            importedContact.saveDetail(&nameDetail, QContact::IgnoreAccessConstraints);
+            importedContact.saveDetail(&nameDetail);
             qCDebug(lcCardDav) << "Decomposed vCard display name into structured name:" << nameDetail;
         } else if (!nicknameField.isEmpty()) {
             SeasideCache::decomposeDisplayLabel(nicknameField, &nameDetail);
-            importedContact.saveDetail(&nameDetail, QContact::IgnoreAccessConstraints);
+            importedContact.saveDetail(&nameDetail);
             qCDebug(lcCardDav) << "Decomposed vCard nickname into structured name:" << nameDetail;
         } else {
             qCWarning(lcCardDav) << "No structured name data exists in the vCard, contact will be unnamed!";
@@ -234,7 +234,7 @@ QPair<QContact, QStringList> CardDavVCardConverter::convertVCardToContact(const 
     // mark each detail of the contact as modifiable
     Q_FOREACH (QContactDetail det, importedContact.details()) {
         det.setValue(QContactDetail__FieldModifiable, true);
-        importedContact.saveDetail(&det, QContact::IgnoreAccessConstraints);
+        importedContact.saveDetail(&det);
     }
 
     *ok = true;
@@ -1022,7 +1022,7 @@ static void setContactGuid(QContact *c, const QString &uid)
 {
     QContactGuid newGuid = c->detail<QContactGuid>();
     newGuid.setGuid(uid);
-    c->saveDetail(&newGuid, QContact::IgnoreAccessConstraints);
+    c->saveDetail(&newGuid);
 }
 
 bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified, const QList<QContact> &removed)
@@ -1052,7 +1052,7 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         const QString uri = addressbookUrl + (addressbookUrl.endsWith('/') ? QString() : QStringLiteral("/")) + uid + QStringLiteral(".vcf");
         QContactSyncTarget st = c.detail<QContactSyncTarget>();
         st.setSyncTarget(uri);
-        c.saveDetail(&st, QContact::IgnoreAccessConstraints);
+        c.saveDetail(&st);
 
         // ensure that we haven't already upsynced this one previously, i.e. partial upsync artifact
         if (q->m_remoteAdditions[addressbookUrl].contains(uri)
@@ -1236,7 +1236,7 @@ void CardDav::upsyncResponse()
                         }
                         etagDetail.setName(KEY_ETAG);
                         etagDetail.setData(etag);
-                        upsynced[i].saveDetail(&etagDetail, QContact::IgnoreAccessConstraints);
+                        upsynced[i].saveDetail(&etagDetail);
                         break;
                     }
                 }
