@@ -24,7 +24,11 @@
 
 #include <QLoggingCategory>
 
-#include <buteosyncfw5/LogMacros.h>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    #include <buteosyncfw6/LogMacros.h>
+#else
+    #include <buteosyncfw5/LogMacros.h>
+#endif
 
 Q_DECLARE_LOGGING_CATEGORY(lcCardDav)
 Q_DECLARE_LOGGING_CATEGORY(lcCardDavProtocol)

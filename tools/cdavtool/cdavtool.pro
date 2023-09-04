@@ -4,9 +4,9 @@ QT-=gui
 QT+=network
 
 CONFIG += link_pkgconfig console
-PKGCONFIG += buteosyncfw5
-PKGCONFIG += libsignon-qt5 accounts-qt5
-PKGCONFIG += Qt5Contacts Qt5Versit contactcache-qt5
+PKGCONFIG += buteosyncfw$${QT_MAJOR_VERSION}
+PKGCONFIG += libsignon-qt$${QT_MAJOR_VERSION} accounts-qt$${QT_MAJOR_VERSION}
+PKGCONFIG += Qt$${QT_MAJOR_VERSION}Contacts Qt$${QT_MAJOR_VERSION}Versit contactcache-qt$${QT_MAJOR_VERSION}
 
 QMAKE_CXXFLAGS += -fPIE -fvisibility=hidden -fvisibility-inlines-hidden
 
