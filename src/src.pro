@@ -9,7 +9,7 @@ QMAKE_CXXFLAGS = -Wall \
 
 TEMPLATE = lib
 CONFIG += plugin
-target.path = $$[QT_INSTALL_LIBS]/buteo-plugins-qt5/oopp
+target.path = $$[QT_INSTALL_LIBS]/buteo-plugins-qt$${QT_MAJOR_VERSION}/oopp
 
 sync.path = /etc/buteo/profiles/sync
 sync.files = carddav.Contacts.xml

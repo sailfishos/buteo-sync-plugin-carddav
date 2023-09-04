@@ -3,3 +3,5 @@
 Makefile
 moc_*
 *.moc
+.qmake.stash
+tests/replyparser/tst_replyparser

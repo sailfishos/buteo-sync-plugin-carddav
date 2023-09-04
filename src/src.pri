@@ -2,21 +2,21 @@ QT       -= gui
 QT       += network dbus
 
 CONFIG += link_pkgconfig console c++11
-PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5
-PKGCONFIG += Qt5Versit Qt5Contacts qtcontacts-sqlite-qt5-extensions
+PKGCONFIG += buteosyncfw$${QT_MAJOR_VERSION} libsignon-qt$${QT_MAJOR_VERSION} accounts-qt$${QT_MAJOR_VERSION}
+PKGCONFIG += Qt$${QT_MAJOR_VERSION}Versit Qt$${QT_MAJOR_VERSION}Contacts qtcontacts-sqlite-qt$${QT_MAJOR_VERSION}-extensions
 
 packagesExist(libsailfishkeyprovider) {
     PKGCONFIG += libsailfishkeyprovider
     DEFINES += USE_SAILFISHKEYPROVIDER
 }
 
-packagesExist(contactcache-qt5) {
-    PKGCONFIG += contactcache-qt5
+packagesExist(contactcache-qt$${QT_MAJOR_VERSION}) {
+    PKGCONFIG += contactcache-qt$${QT_MAJOR_VERSION}
     DEFINES += USE_LIBCONTACTS
 }
 
 # We need the moc output for the headers from sqlite-extensions
-extensionsIncludePath = $$system(pkg-config --cflags-only-I qtcontacts-sqlite-qt5-extensions)
+extensionsIncludePath = $$system(pkg-config --cflags-only-I qtcontacts-sqlite-qt$${QT_MAJOR_VERSION}-extensions)
 VPATH += $$replace(extensionsIncludePath, -I, )
 HEADERS += qcontactclearchangeflagsrequest.h contactmanagerengine.h
 
