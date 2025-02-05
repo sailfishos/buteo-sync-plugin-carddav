@@ -86,13 +86,13 @@ protected:
             const QList<QContact> &addedContacts,
             const QList<QContact> &modifiedContacts,
             const QList<QContact> &deletedContacts);
-    void syncFinishedSuccessfully();
-    void syncFinishedWithError();
 
 private Q_SLOTS:
     void sync(const QString &serverUrl, const QString &addressbookPath, const QString &username, const QString &password, const QString &accessToken, bool ignoreSslErrors);
     void signInError();
     void cardDavError(int errorCode = 0);
+    void syncFinishedSuccessfully();
+    void syncFinishedWithError();
 
 private:
     friend class CardDav;
