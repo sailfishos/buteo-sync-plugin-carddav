@@ -359,7 +359,7 @@ void Syncer::cardDavError(int errorCode)
     if (errorCode == HTTP_UNAUTHORIZED_ACCESS) {
         m_auth->setCredentialsNeedUpdate(m_accountId);
     }
-    QMetaObject::invokeMethod(this, "syncFinishedWithError", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, "syncFailed", Qt::QueuedConnection);
 }
 
 void Syncer::purgeAccount(int accountId)
