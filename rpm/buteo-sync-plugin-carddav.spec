@@ -1,6 +1,6 @@
 Name:       buteo-sync-plugin-carddav
 Summary:    Syncs contact data from CardDAV services
-Version:    0.1.9
+Version:    0.1.12
 Release:    1
 License:    LGPLv2
 URL:        https://github.com/sailfishos/buteo-sync-plugin-carddav
@@ -32,15 +32,23 @@ Requires:   %{name} = %{version}-%{release}
 %description tests
 This package contains unit tests for the CardDAV Buteo sync plugin.
 
+%prep
+%autosetup -n %{name}-%{version}
+
+%build
+%qmake5 "CONFIG+=build-tools"
+%make_build
+
+%install
+%qmake5_install
+
 %files
-%defattr(-,root,root,-)
+%license LICENSE
 %{_libdir}/buteo-plugins-qt5/oopp/libcarddav-client.so
 %config %{_sysconfdir}/buteo/profiles/client/carddav.xml
 %config %{_sysconfdir}/buteo/profiles/sync/carddav.Contacts.xml
-%license LICENSE
 
 %files tests
-%defattr(-,root,root,-)
 /opt/tests/buteo/plugins/carddav/cdavtool
 /opt/tests/buteo/plugins/carddav/tests.xml
 /opt/tests/buteo/plugins/carddav/tst_replyparser
@@ -74,14 +82,3 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-contact-multiple-rev.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-contact-multiple-uid.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_contactdata_single-contact-multiple-xgender.xml
-
-%prep
-%autosetup -n %{name}-%{version}
-
-%build
-%qmake5 "CONFIG+=build-tools"
-%make_build
-
-%install
-%qmake5_install
-
