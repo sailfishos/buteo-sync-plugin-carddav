@@ -16,7 +16,7 @@ packagesExist(contactcache-qt$${QT_MAJOR_VERSION}) {
 }
 
 # We need the moc output for the headers from sqlite-extensions
-extensionsIncludePath = $$system(pkg-config --cflags-only-I qtcontacts-sqlite-qt$${QT_MAJOR_VERSION}-extensions)
+extensionsIncludePath = $$system($$PKG_CONFIG --cflags-only-I qtcontacts-sqlite-qt$${QT_MAJOR_VERSION}-extensions)
 VPATH += $$replace(extensionsIncludePath, -I, )
 HEADERS += qcontactclearchangeflagsrequest.h contactmanagerengine.h
 
