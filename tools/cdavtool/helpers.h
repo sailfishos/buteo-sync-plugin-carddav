@@ -127,7 +127,8 @@ public:
     void start(const QString &serverAddress,
                const QString &calendarHomePath = QString());
 
-    static void writeCalendars(Accounts::Account *account, const Accounts::Service &srv, const QList<OnlineCalendar> &calendars);
+    static void writeCalendars(Accounts::Account *account, const Accounts::Service &srv,
+                               const QList<OnlineCalendar> &calendars);
 
 Q_SIGNALS:
     void error();
