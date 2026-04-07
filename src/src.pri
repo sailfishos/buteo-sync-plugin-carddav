@@ -1,7 +1,7 @@
 QT       -= gui
 QT       += network dbus
 
-CONFIG += link_pkgconfig console c++11
+CONFIG += link_pkgconfig console
 PKGCONFIG += buteosyncfw$${QT_MAJOR_VERSION} libsignon-qt$${QT_MAJOR_VERSION} accounts-qt$${QT_MAJOR_VERSION}
 PKGCONFIG += Qt$${QT_MAJOR_VERSION}Versit Qt$${QT_MAJOR_VERSION}Contacts qtcontacts-sqlite-qt$${QT_MAJOR_VERSION}-extensions
 

@@ -85,8 +85,10 @@ static void DebugReply(const QNetworkReply &reply, const QByteArray &data = QByt
 
 static void dumpXml(const QByteArray &xml)
 {
-    // this algorithm doesn't handle a lot of stuff (escaped slashes/angle-brackets, slashes/angle-brackets in text, etc) but it works:
-    // see < then read until > and that becomes "tag".  Print indent, print tag, print newline.  If tag didn't contain / then indent += "    " else deindent.
+    // this algorithm doesn't handle a lot of stuff (escaped slashes/angle-brackets,
+    // slashes/angle-brackets in text, etc) but it works:
+    // see < then read until > and that becomes "tag".  Print indent, print tag, print newline.
+    // If tag didn't contain / then indent += "    " else deindent.
     // see anything else, then read until < and that becomes "text".  Print indent, print text, print newline.
     QString indent;
     QString formatted;
@@ -194,7 +196,8 @@ void CalDAVDiscovery::start(const QString &serverAddress, const QString &calenda
     startRequests();
 }
 
-void CalDAVDiscovery::writeCalendars(Accounts::Account *account, const Accounts::Service &srv, const QList<OnlineCalendar> &calendars)
+void CalDAVDiscovery::writeCalendars(Accounts::Account *account, const Accounts::Service &srv,
+                                     const QList<OnlineCalendar> &calendars)
 {
     if (!account || !srv.isValid()) {
         qWarning() << "account is null or service is invalid";

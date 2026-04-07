@@ -12,6 +12,7 @@ BuildRequires:  pkgconfig(Qt5Sql)
 BuildRequires:  pkgconfig(Qt5Network)
 BuildRequires:  pkgconfig(Qt5Contacts)
 BuildRequires:  pkgconfig(Qt5Versit)
+BuildRequires:  pkgconfig(Qt5Test)
 BuildRequires:  pkgconfig(mlite5)
 BuildRequires:  pkgconfig(buteosyncfw5) >= 0.10.0
 BuildRequires:  pkgconfig(accounts-qt5) >= 1.13
@@ -26,7 +27,6 @@ A Buteo plugin which syncs contact data from CardDAV services
 
 %package tests
 Summary:    Unit tests for buteo-sync-plugin-carddav
-BuildRequires:  pkgconfig(Qt5Test)
 Requires:   %{name} = %{version}-%{release}
 
 %description tests
