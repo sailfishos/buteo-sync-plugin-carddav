@@ -44,6 +44,7 @@ static const QString XmlElementHref = QStringLiteral("href");
 static const QString XmlElementComp = QStringLiteral("comp");
 static const QString XmlElementResourceType = QStringLiteral("resourcetype");
 static const QString XmlElementCalendar = QStringLiteral("calendar");
+static const QString XmlElementSubscribed = QStringLiteral("subscribed");
 static const QString XmlElementPrincipal = QStringLiteral("principal");
 static const QString XmlElementCalendarColor = QStringLiteral("calendar-color");
 static const QString XmlElementDisplayName = QStringLiteral("displayname");
@@ -560,7 +561,7 @@ bool CalDAVDiscovery::addNextCalendar(QXmlStreamReader *reader, QString *parsedU
             reader->readNext();
             while (!reader->atEnd() && reader->name() != XmlElementResourceType) {
                 reader->readNext();
-                if (reader->name() == XmlElementCalendar) {
+                if (reader->name() == XmlElementCalendar || reader->name() == XmlElementSubscribed) {
                     isCalendar = true;
                 } else if (reader->name() == XmlElementPrincipal) {
                     *parsedUserPrincipalPath = calendarPath;
