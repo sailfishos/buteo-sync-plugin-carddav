@@ -1204,6 +1204,12 @@ void CardDav::upsyncResponse()
             // We should not abort the sync if we receive this error.
             qCWarning(lcCardDav) << Q_FUNC_INFO << "405 MethodNotAllowed - is the collection read-only?";
             qCWarning(lcCardDav) << Q_FUNC_INFO << "continuing sync despite this error - upsync will have failed!";
+        } else if (httpError == 412) {
+            // Precondition failed error. Most likely, the contact has been modified on both sides (phone
+            // and remote server). Currently, ignore this issue. This is better than the previous behavior 
+            // which was to completely abort sync process. A conflict handling system should be needed
+            qCWarning(lcCardDav) << Q_FUNC_INFO << "412 Precondition Failed - contact has been modified on both sides";
+            qCWarning(lcCardDav) << Q_FUNC_INFO << "continuing sync despite this error - upsync will have failed!";
         } else {
             errorOccurred(httpError);
             return;
