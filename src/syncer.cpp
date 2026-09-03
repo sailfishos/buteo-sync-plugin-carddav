@@ -94,6 +94,7 @@ void Syncer::startSync(int accountId)
     Q_ASSERT(accountId != 0);
     m_accountId = accountId;
     m_undeleteIds.clear();
+    m_keepIds.clear();
     m_auth = new Auth(this);
     connect(m_auth, SIGNAL(signInCompleted(QString,QString,QString,QString,QString,bool)),
             this, SLOT(sync(QString,QString,QString,QString,QString,bool)));
@@ -389,10 +390,26 @@ void Syncer::storeRemoteChangesLocally(
         }
     }
 
+    // A contact modified here and removed remotely is kept: the modification
+    // has just been upsynced without a precondition, so applying the removal
+    // locally would delete the row we have just put back on the server.
+    const QSet<QContactId> keepIds = m_keepIds.take(remotePath);
+    QList<QContact> remainingDeletions = deletedContacts;
+    if (!keepIds.isEmpty()) {
+        for (int i = remainingDeletions.size() - 1; i >= 0; --i) {
+            if (keepIds.contains(remainingDeletions.at(i).id())) {
+                qCDebug(lcCardDav) << Q_FUNC_INFO << "keeping locally modified contact"
+                         << QString::fromLatin1(remainingDeletions.at(i).id().localId())
+                         << "against a remote removal";
+                remainingDeletions.removeAt(i);
+            }
+        }
+    }
+
     TwoWayContactSyncAdaptor::storeRemoteChangesLocally(collection,
                                                         addedContacts,
                                                         modifiedContacts,
-                                                        deletedContacts);
+                                                        remainingDeletions);
 }
 
 void Syncer::syncFinishedSuccessfully()

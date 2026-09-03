@@ -144,6 +144,9 @@ private:
 
     // Local deletions overruled by a remote modification, per addressbook url.
     QHash<QString, QSet<QContactId> > m_undeleteIds;
+
+    // Remote removals overruled by a local modification, per addressbook url.
+    QHash<QString, QSet<QContactId> > m_keepIds;
 };
 
 #endif // SYNCER_P_H
