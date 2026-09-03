@@ -47,6 +47,7 @@ public:
     QNetworkReply *contactEtags(const QString &serverUrl, const QString &addressbookPath);
     QNetworkReply *contactData(const QString &serverUrl, const QString &addressbookPath, const QStringList &contactEtags);
     QNetworkReply *contactMultiget(const QString &serverUrl, const QString &addressbookPath, const QStringList &contactUris);
+    QNetworkReply *contactGet(const QString &serverUrl, const QString &contactPath);
     QNetworkReply *upsyncAddMod(const QString &serverUrl, const QString &contactPath, const QString &etag, const QString &vcard);
     QNetworkReply *upsyncDeletion(const QString &serverUrl, const QString &contactPath, const QString &etag);
 

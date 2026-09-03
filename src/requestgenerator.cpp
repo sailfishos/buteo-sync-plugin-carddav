@@ -380,6 +380,22 @@ QNetworkReply *RequestGenerator::contactMultiget(const QString &serverUrl, const
     return generateRequest(serverUrl, addressbookPath, QLatin1String("1"), QLatin1String("REPORT"), requestStr);
 }
 
+QNetworkReply *RequestGenerator::contactGet(const QString &serverUrl, const QString &contactPath)
+{
+    if (Q_UNLIKELY(contactPath.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "contact uri empty, aborting";
+        return 0;
+    }
+
+    if (Q_UNLIKELY(serverUrl.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "server url empty, aborting";
+        return 0;
+    }
+
+    return generateUpsyncRequest(serverUrl, contactPath, QString(), QString(),
+                                 QStringLiteral("GET"), QString());
+}
+
 QNetworkReply *RequestGenerator::upsyncAddMod(const QString &serverUrl, const QString &contactPath, const QString &etag, const QString &vcard)
 {
     if (Q_UNLIKELY(vcard.isEmpty())) {

@@ -98,6 +98,7 @@ private Q_SLOTS:
     void contactMetadataResponse();
     void contactsResponse();
     void upsyncResponse();
+    void deletionProbeResponse();
     void upsyncComplete(const QString &addressbookUrl);
     void errorOccurred(int httpError);
 

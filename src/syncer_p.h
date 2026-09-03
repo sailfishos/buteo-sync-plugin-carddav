@@ -32,6 +32,7 @@
 #include <QString>
 #include <QList>
 #include <QPair>
+#include <QSet>
 #include <QNetworkAccessManager>
 
 #include <QContactManager>
@@ -86,6 +87,11 @@ protected:
             const QList<QContact> &addedContacts,
             const QList<QContact> &modifiedContacts,
             const QList<QContact> &deletedContacts);
+    void storeRemoteChangesLocally(
+            const QContactCollection &collection,
+            const QList<QContact> &addedContacts,
+            const QList<QContact> &modifiedContacts,
+            const QList<QContact> &deletedContacts);
     void syncFinishedSuccessfully();
     void syncFinishedWithError();
 
@@ -135,6 +141,9 @@ private:
         QList<QContact> unmodified;
     };
     QHash<QString, AMRU> m_collectionAMRU; // collection uri to AMRU
+
+    // Local deletions overruled by a remote modification, per addressbook url.
+    QHash<QString, QSet<QContactId> > m_undeleteIds;
 };
 
 #endif // SYNCER_P_H
