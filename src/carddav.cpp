@@ -1150,6 +1150,16 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
             qCWarning(lcCardDav) << Q_FUNC_INFO << "deleted contact server uri unknown:" << QString::fromLatin1(c.id().localId()) << " - " << guidstr;
             continue; // TODO: this is actually an error.
         }
+
+        // Deleted here, modified remotely: remote wins.  Our etag is stale,
+        // so the DELETE could not succeed anyway.
+        if (q->m_remoteModifications[addressbookUrl].contains(uri)) {
+            qCWarning(lcCardDav) << Q_FUNC_INFO << "local deletion of" << uri
+                       << "conflicts with a remote modification - keeping the remote version";
+            q->m_undeleteIds[addressbookUrl].insert(c.id());
+            continue;
+        }
+
         QString etag;
         for (const QContactExtendedDetail &ed : c.details<QContactExtendedDetail>()) {
             if (ed.name() == KEY_ETAG) {
