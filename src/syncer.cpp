@@ -30,6 +30,8 @@
 #include <qcontactclearchangeflagsrequest.h>
 #include <qcontactclearchangeflagsrequest_impl.h>
 #include <qcontactstatusflags_impl.h>
+#include <qcontactundelete.h>
+#include <qcontactundelete_impl.h>
 
 #include <QtCore/QDateTime>
 #include <QtCore/QUrl>
@@ -91,6 +93,8 @@ void Syncer::startSync(int accountId)
 {
     Q_ASSERT(accountId != 0);
     m_accountId = accountId;
+    m_undeleteIds.clear();
+    m_keepIds.clear();
     m_auth = new Auth(this);
     connect(m_auth, SIGNAL(signInCompleted(QString,QString,QString,QString,QString,bool)),
             this, SLOT(sync(QString,QString,QString,QString,QString,bool)));
@@ -339,6 +343,73 @@ bool Syncer::storeLocalChangesRemotely(
                                     addedContacts,
                                     modifiedContacts,
                                     deletedContacts);
+}
+
+void Syncer::storeRemoteChangesLocally(
+        const QContactCollection &collection,
+        const QList<QContact> &addedContacts,
+        const QList<QContact> &modifiedContacts,
+        const QList<QContact> &deletedContacts)
+{
+    // ContactWriter rejects any change to a row flagged as deleted unless the
+    // contact carries an undelete detail.
+    const QString remotePath = collection.extendedMetaData(
+            COLLECTION_EXTENDEDMETADATA_KEY_REMOTEPATH).toString();
+    const QSet<QContactId> undeleteIds = m_undeleteIds.take(remotePath);
+    if (!undeleteIds.isEmpty() && !collection.id().isNull()) {
+        // By id, not via the change lists: a contact whose server copy could
+        // not be fetched appears in neither, but must still survive.
+        QList<QContact> undeletes;
+        for (const QContactId &id : undeleteIds) {
+            QContact undelete;
+            undelete.setId(id);
+            undelete.setCollectionId(collection.id());
+            QContactUndelete undeleteDetail;
+            undelete.saveDetail(&undeleteDetail, QContact::IgnoreAccessConstraints);
+            QContactStatusFlags flags;
+            flags.setFlag(QContactStatusFlags::IsModified, true);
+            undelete.saveDetail(&flags, QContact::IgnoreAccessConstraints);
+            undeletes.append(undelete);
+        }
+
+        QtContactsSqliteExtensions::ContactManagerEngine *engine
+                = QtContactsSqliteExtensions::contactManagerEngine(m_contactManager);
+        QContactCollection undeleteCollection = collection;
+        QHash<QContactCollection*, QList<QContact>*> undeleteCollections;
+        undeleteCollections.insert(&undeleteCollection, &undeletes);
+        QContactManager::Error err = QContactManager::NoError;
+        // clearChangeFlags would purge exactly what we are keeping.
+        if (!engine->storeChanges(nullptr, &undeleteCollections, QList<QContactCollectionId>(),
+                                  QtContactsSqliteExtensions::ContactManagerEngine::PreserveRemoteChanges,
+                                  false, &err)) {
+            qCWarning(lcCardDav) << Q_FUNC_INFO << "failed to undelete" << undeletes.size()
+                       << "contacts whose local deletion lost against a remote change:" << err;
+        } else {
+            qCDebug(lcCardDav) << Q_FUNC_INFO << "undeleted" << undeletes.size()
+                     << "contacts whose local deletion lost against a remote change";
+        }
+    }
+
+    // A contact modified here and removed remotely is kept: the modification
+    // has just been upsynced without a precondition, so applying the removal
+    // locally would delete the row we have just put back on the server.
+    const QSet<QContactId> keepIds = m_keepIds.take(remotePath);
+    QList<QContact> remainingDeletions = deletedContacts;
+    if (!keepIds.isEmpty()) {
+        for (int i = remainingDeletions.size() - 1; i >= 0; --i) {
+            if (keepIds.contains(remainingDeletions.at(i).id())) {
+                qCDebug(lcCardDav) << Q_FUNC_INFO << "keeping locally modified contact"
+                         << QString::fromLatin1(remainingDeletions.at(i).id().localId())
+                         << "against a remote removal";
+                remainingDeletions.removeAt(i);
+            }
+        }
+    }
+
+    TwoWayContactSyncAdaptor::storeRemoteChangesLocally(collection,
+                                                        addedContacts,
+                                                        modifiedContacts,
+                                                        remainingDeletions);
 }
 
 void Syncer::syncFinishedSuccessfully()

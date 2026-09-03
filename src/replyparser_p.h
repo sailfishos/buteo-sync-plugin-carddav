@@ -89,6 +89,8 @@ public:
     QList<ContactInformation> parseSyncTokenDelta(const QByteArray &syncTokenDeltaResponse, const QString &addressbookUrl, QString *newSyncToken) const;
     QList<ContactInformation> parseContactMetadata(const QByteArray &contactMetadataResponse, const QString &addressbookUrl, const QHash<QString, QString> &contactUriToEtag) const;
     QHash<QString, QContact> parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const;
+    QContact buildContact(const QString &vcard, const QString &addressbookUrl,
+                          const QString &uri, const QString &etag, bool *ok) const;
 
 private:
     Syncer *q;
