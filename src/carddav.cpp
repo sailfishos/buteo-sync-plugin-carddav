@@ -977,6 +977,10 @@ void CardDav::contactsResponse()
 
 void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified)
 {
+    // Every addressbook that took part gets an entry, so that a sync which
+    // changed nothing says so rather than leaving the log silent.
+    q->resultsFor(addressbookUrl);
+
     // at this point, we have already retrieved the added+modified contacts from the server.
     // we need to populate the removed contacts list, by inspecting the local data.
     if (!q->m_collectionAMRU.contains(addressbookUrl)) {
@@ -1013,9 +1017,42 @@ void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList
             }
         }
 
+        // Record what is about to be applied locally.  storeChanges() reports
+        // failure for the collection as a whole rather than per contact, so a
+        // failure here ends the sync and the results describe a failed one.
+        auto recordAll = [this, &addressbookUrl] (const QList<QContact> &contacts,
+                                                  Buteo::TargetResults::ItemOperation operation) {
+            for (const QContact &c : contacts) {
+                q->recordApplied(addressbookUrl, c.detail<QContactGuid>().guid(), operation);
+            }
+        };
+        recordAll(added, Buteo::TargetResults::ITEM_ADDED);
+        recordAll(modifiedWithIds, Buteo::TargetResults::ITEM_MODIFIED);
+        recordAll(removed, Buteo::TargetResults::ITEM_DELETED);
+
         // TODO: also match remotely added to locally added, to find partial upsync artifacts.
         q->remoteContactChangesDetermined(q->m_currentCollections[addressbookUrl], added, modifiedWithIds, removed);
     }
+}
+
+// Which contact an upsync request was for, and what it was trying to do, so
+// that its outcome can be reported once the reply arrives.
+static void setReportedChange(QNetworkReply *reply, const QString &uid,
+                              Buteo::TargetResults::ItemOperation operation)
+{
+    reply->setProperty("reportUid", uid);
+    reply->setProperty("reportOperation", static_cast<int>(operation));
+}
+
+static QString upsyncedUid(QNetworkReply *reply)
+{
+    return reply->property("reportUid").toString();
+}
+
+static Buteo::TargetResults::ItemOperation upsyncedOperation(QNetworkReply *reply)
+{
+    return static_cast<Buteo::TargetResults::ItemOperation>(
+            reply->property("reportOperation").toInt());
 }
 
 static void setContactGuid(QContact *c, const QString &uid)
@@ -1081,6 +1118,7 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         hadNonSpuriousChanges = true;
         reply->setProperty("addressbookUrl", addressbookUrl);
         reply->setProperty("contactGuid", guid);
+        setReportedChange(reply, guid, Buteo::TargetResults::ITEM_ADDED);
         connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
         connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
     }
@@ -1137,6 +1175,7 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         hadNonSpuriousChanges = true;
         reply->setProperty("addressbookUrl", addressbookUrl);
         reply->setProperty("contactGuid", guidstr);
+        setReportedChange(reply, guidstr, Buteo::TargetResults::ITEM_MODIFIED);
         connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
         connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
     }
@@ -1148,6 +1187,9 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         const QString uri = c.detail<QContactSyncTarget>().syncTarget();
         if (uri.isEmpty()) {
             qCWarning(lcCardDav) << Q_FUNC_INFO << "deleted contact server uri unknown:" << QString::fromLatin1(c.id().localId()) << " - " << guidstr;
+            q->recordUpsynced(addressbookUrl, guidstr, Buteo::TargetResults::ITEM_DELETED,
+                              Buteo::TargetResults::ITEM_OPERATION_FAILED,
+                              QStringLiteral("no server uri known for this contact"));
             continue; // TODO: this is actually an error.
         }
         QString etag;
@@ -1165,6 +1207,7 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         m_upsyncRequests[addressbookUrl] += 1;
         hadNonSpuriousChanges = true;
         reply->setProperty("addressbookUrl", addressbookUrl);
+        setReportedChange(reply, guidstr, Buteo::TargetResults::ITEM_DELETED);
         connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
         connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
     }
@@ -1204,10 +1247,15 @@ void CardDav::upsyncResponse()
             // We should not abort the sync if we receive this error.
             qCWarning(lcCardDav) << Q_FUNC_INFO << "405 MethodNotAllowed - is the collection read-only?";
             qCWarning(lcCardDav) << Q_FUNC_INFO << "continuing sync despite this error - upsync will have failed!";
+            q->recordUpsynced(addressbookUrl, upsyncedUid(reply), upsyncedOperation(reply),
+                              Buteo::TargetResults::ITEM_OPERATION_FAILED,
+                              QStringLiteral("405 Method Not Allowed - the collection may be read-only"));
         } else {
             errorOccurred(httpError);
             return;
         }
+    } else {
+        q->recordUpsynced(addressbookUrl, upsyncedUid(reply), upsyncedOperation(reply));
     }
 
     if (!guid.isEmpty()) {
