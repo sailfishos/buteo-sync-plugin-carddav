@@ -128,13 +128,28 @@ void CardDavClient::syncFinished(Buteo::SyncResults::MinorCode minorErrorCode, c
         m_results = Buteo::SyncResults(QDateTime::currentDateTimeUtc(),
                                        Buteo::SyncResults::SYNC_RESULT_SUCCESS,
                                        Buteo::SyncResults::NO_ERROR);
+        addTargetResults();
         emit success(getProfileName(), message);
     } else {
         qCCritical(lcCardDav) << "CardDAV sync failed:" << minorErrorCode << message;
         m_results = Buteo::SyncResults(iProfile.lastSuccessfulSyncTime(), // don't change the last sync time
                                        Buteo::SyncResults::SYNC_RESULT_FAILED,
                                        minorErrorCode);
+        addTargetResults();
         emit error(getProfileName(), message, minorErrorCode);
+    }
+}
+
+void CardDavClient::addTargetResults()
+{
+    // Also on a failed sync: what did get through before it stopped is worth
+    // recording, and a failure that was tolerated per contact is only visible
+    // here.
+    if (m_syncer) {
+        const QList<Buteo::TargetResults> results = m_syncer->targetResults();
+        for (const Buteo::TargetResults &result : results) {
+            m_results.addTargetResults(result);
+        }
     }
 }
 

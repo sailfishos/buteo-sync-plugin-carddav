@@ -59,6 +59,7 @@ private Q_SLOTS:
 private:
     void abortSync(Buteo::SyncResults::MinorCode code);
     void syncFinished(Buteo::SyncResults::MinorCode minorErrorCode, const QString &message);
+    void addTargetResults();
     Buteo::SyncProfile::SyncDirection syncDirection();
     Buteo::SyncProfile::ConflictResolutionPolicy conflictResolutionPolicy();
 

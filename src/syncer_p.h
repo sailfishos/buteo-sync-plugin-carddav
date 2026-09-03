@@ -27,6 +27,8 @@
 
 #include <twowaycontactsyncadaptor.h>
 
+#include <TargetResults.h>
+
 #include <QObject>
 #include <QDateTime>
 #include <QString>
@@ -59,6 +61,10 @@ public:
     void startSync(int accountId);
     void purgeAccount(int accountId);
     void abortSync();
+
+    // Per-addressbook outcome of the sync, one entry per contact, for the
+    // sync log.  Empty until the first change has been recorded.
+    QList<Buteo::TargetResults> targetResults() const;
 
 Q_SIGNALS:
     void syncSucceeded();
@@ -147,6 +153,20 @@ private:
 
     // Remote removals overruled by a local modification, per addressbook url.
     QHash<QString, QSet<QContactId> > m_keepIds;
+
+    // What happened to each contact, per addressbook url.
+    void recordApplied(const QString &addressbookUrl, const QString &uid,
+                       Buteo::TargetResults::ItemOperation operation,
+                       Buteo::TargetResults::ItemOperationStatus status
+                           = Buteo::TargetResults::ITEM_OPERATION_SUCCEEDED,
+                       const QString &message = QString());
+    void recordUpsynced(const QString &addressbookUrl, const QString &uid,
+                        Buteo::TargetResults::ItemOperation operation,
+                        Buteo::TargetResults::ItemOperationStatus status
+                            = Buteo::TargetResults::ITEM_OPERATION_SUCCEEDED,
+                        const QString &message = QString());
+    Buteo::TargetResults &resultsFor(const QString &addressbookUrl);
+    QHash<QString, Buteo::TargetResults> m_targetResults;
 };
 
 #endif // SYNCER_P_H

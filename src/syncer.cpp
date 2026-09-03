@@ -95,6 +95,7 @@ void Syncer::startSync(int accountId)
     m_accountId = accountId;
     m_undeleteIds.clear();
     m_keepIds.clear();
+    m_targetResults.clear();
     m_auth = new Auth(this);
     connect(m_auth, SIGNAL(signInCompleted(QString,QString,QString,QString,QString,bool)),
             this, SLOT(sync(QString,QString,QString,QString,QString,bool)));
@@ -393,6 +394,59 @@ void Syncer::storeRemoteChangesLocally(
                                                         addedContacts,
                                                         modifications,
                                                         remainingDeletions);
+}
+
+Buteo::TargetResults &Syncer::resultsFor(const QString &addressbookUrl)
+{
+    QHash<QString, Buteo::TargetResults>::Iterator it = m_targetResults.find(addressbookUrl);
+    if (it == m_targetResults.end()) {
+        // The addressbook's display name if we know it, so that the log names
+        // the same thing the user sees; the url is the fallback.
+        QString name = m_currentCollections.value(addressbookUrl)
+                .metaData(QContactCollection::KeyName).toString();
+        if (name.isEmpty()) {
+            name = addressbookUrl;
+        }
+        it = m_targetResults.insert(addressbookUrl, Buteo::TargetResults(name.toHtmlEscaped()));
+    }
+    return *it;
+}
+
+// The server-side uid, without the accountId and addressbook prefix the plugin
+// adds to keep guids unique across addressbooks.  The details already hang off
+// one addressbook, so the prefix adds nothing and would put the account id and
+// the collection path into the sync log.
+static QString reportedUid(const QString &guid, const QString &addressbookUrl, int accountId)
+{
+    const QString prefix = QStringLiteral("%1:AB:%2:").arg(QString::number(accountId), addressbookUrl);
+    return guid.startsWith(prefix) ? guid.mid(prefix.size()) : guid;
+}
+
+void Syncer::recordApplied(const QString &addressbookUrl, const QString &uid,
+                           Buteo::TargetResults::ItemOperation operation,
+                           Buteo::TargetResults::ItemOperationStatus status,
+                           const QString &message)
+{
+    if (!uid.isEmpty()) {
+        resultsFor(addressbookUrl).addLocalDetails(
+                reportedUid(uid, addressbookUrl, m_accountId), operation, status, message);
+    }
+}
+
+void Syncer::recordUpsynced(const QString &addressbookUrl, const QString &uid,
+                            Buteo::TargetResults::ItemOperation operation,
+                            Buteo::TargetResults::ItemOperationStatus status,
+                            const QString &message)
+{
+    if (!uid.isEmpty()) {
+        resultsFor(addressbookUrl).addRemoteDetails(
+                reportedUid(uid, addressbookUrl, m_accountId), operation, status, message);
+    }
+}
+
+QList<Buteo::TargetResults> Syncer::targetResults() const
+{
+    return m_targetResults.values();
 }
 
 void Syncer::syncFinishedSuccessfully()
