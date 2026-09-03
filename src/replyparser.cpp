@@ -664,6 +664,65 @@ QList<ReplyParser::ContactInformation> ReplyParser::parseContactMetadata(
     return info;
 }
 
+QContact ReplyParser::buildContact(const QString &vcard, const QString &addressbookUrl,
+                                  const QString &uri, const QString &etag, bool *ok) const
+{
+    // import the data as a vCard
+    *ok = true;
+    QPair<QContact, QStringList> result = m_converter->convertVCardToContact(vcard, ok);
+    if (!*ok) {
+        return QContact();
+    }
+
+    // fix up the GUID of the contact if required.
+    QContact importedContact = result.first;
+    QContactGuid guid = importedContact.detail<QContactGuid>();
+    const QString uid = guid.guid();
+    if (uid.isEmpty()) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "contact import from vcard has no UID:\n" << vcard;
+        *ok = false;
+        return QContact();
+    }
+    if (!uid.startsWith(QStringLiteral("%1:AB:%2:").arg(QString::number(q->m_accountId), addressbookUrl))) {
+        // prefix the UID with accountId and addressbook URI to avoid duplicated GUID issue.
+        // RFC6352 only requires that the UID be unique within a single collection (addressbook).
+        // So, we set the guid to be a compound of the accountId, addressbook URI and the UID.
+        guid.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid));
+        importedContact.saveDetail(&guid, QContact::IgnoreAccessConstraints);
+    }
+
+    // store the sync target of the contact
+    QContactSyncTarget syncTarget = importedContact.detail<QContactSyncTarget>();
+    syncTarget.setSyncTarget(uri);
+    importedContact.saveDetail(&syncTarget, QContact::IgnoreAccessConstraints);
+
+    // store the etag into the contact
+    QContactExtendedDetail etagDetail;
+    for (const QContactExtendedDetail &ed : importedContact.details<QContactExtendedDetail>()) {
+        if (ed.name() == KEY_ETAG) {
+            etagDetail = ed;
+            break;
+        }
+    }
+    etagDetail.setName(KEY_ETAG);
+    etagDetail.setData(etag);
+    importedContact.saveDetail(&etagDetail, QContact::IgnoreAccessConstraints);
+
+    // store unsupported properties into the contact.
+    QContactExtendedDetail unsupportedPropertiesDetail;
+    for (const QContactExtendedDetail &ed : importedContact.details<QContactExtendedDetail>()) {
+        if (ed.name() == KEY_UNSUPPORTEDPROPERTIES) {
+            unsupportedPropertiesDetail = ed;
+            break;
+        }
+    }
+    unsupportedPropertiesDetail.setName(KEY_UNSUPPORTEDPROPERTIES);
+    unsupportedPropertiesDetail.setData(result.second);
+    importedContact.saveDetail(&unsupportedPropertiesDetail, QContact::IgnoreAccessConstraints);
+
+    return importedContact;
+}
+
 QHash<QString, QContact> ReplyParser::parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const
 {
     /* We expect a response of the form:
@@ -718,59 +777,12 @@ QHash<QString, QContact> ReplyParser::parseContactData(const QByteArray &contact
         const QString etag = rmap.value("propstat").toMap().value("prop").toMap().value("getetag").toMap().value("@text").toString();
         const QString vcard = rmap.value("propstat").toMap().value("prop").toMap().value("address-data").toMap().value("@text").toString();
 
-        // import the data as a vCard
         bool ok = true;
-        QPair<QContact, QStringList> result = m_converter->convertVCardToContact(vcard, &ok);
+        const QContact importedContact = buildContact(vcard, addressbookUrl, uri, etag, &ok);
         if (!ok) {
             continue;
         }
 
-        // fix up the GUID of the contact if required.
-        QContact importedContact = result.first;
-        QContactGuid guid = importedContact.detail<QContactGuid>();
-        const QString uid = guid.guid();
-        if (uid.isEmpty()) {
-            qCWarning(lcCardDav) << Q_FUNC_INFO << "contact import from vcard has no UID:\n" << vcard;
-            continue;
-        }
-        if (!uid.startsWith(QStringLiteral("%1:AB:%2:").arg(QString::number(q->m_accountId), addressbookUrl))) {
-            // prefix the UID with accountId and addressbook URI to avoid duplicated GUID issue.
-            // RFC6352 only requires that the UID be unique within a single collection (addressbook).
-            // So, we set the guid to be a compound of the accountId, addressbook URI and the UID.
-            guid.setGuid(QStringLiteral("%1:AB:%2:%3").arg(QString::number(q->m_accountId), addressbookUrl, uid));
-            importedContact.saveDetail(&guid, QContact::IgnoreAccessConstraints);
-        }
-
-        // store the sync target of the contact
-        QContactSyncTarget syncTarget = importedContact.detail<QContactSyncTarget>();
-        syncTarget.setSyncTarget(uri);
-        importedContact.saveDetail(&syncTarget, QContact::IgnoreAccessConstraints);
-
-        // store the etag into the contact
-        QContactExtendedDetail etagDetail;
-        for (const QContactExtendedDetail &ed : importedContact.details<QContactExtendedDetail>()) {
-            if (ed.name() == KEY_ETAG) {
-                etagDetail = ed;
-                break;
-            }
-        }
-        etagDetail.setName(KEY_ETAG);
-        etagDetail.setData(etag);
-        importedContact.saveDetail(&etagDetail, QContact::IgnoreAccessConstraints);
-
-        // store unsupported properties into the contact.
-        QContactExtendedDetail unsupportedPropertiesDetail;
-        for (const QContactExtendedDetail &ed : importedContact.details<QContactExtendedDetail>()) {
-            if (ed.name() == KEY_UNSUPPORTEDPROPERTIES) {
-                unsupportedPropertiesDetail = ed;
-                break;
-            }
-        }
-        unsupportedPropertiesDetail.setName(KEY_UNSUPPORTEDPROPERTIES);
-        unsupportedPropertiesDetail.setData(result.second);
-        importedContact.saveDetail(&unsupportedPropertiesDetail, QContact::IgnoreAccessConstraints);
-
-        // and insert into the return map.
         uriToContactData.insert(uri, importedContact);
     }
 
