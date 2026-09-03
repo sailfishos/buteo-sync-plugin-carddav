@@ -985,8 +985,12 @@ void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList
     } else {
         QList<QContact> removed;
         const Syncer::AMRU amru = q->m_collectionAMRU.take(addressbookUrl);
+        // m_remoteRemovals is keyed by addressbook url first; the uri lives
+        // in the inner hash.  Matching it against the outer one never hits.
+        const QHash<QString, ReplyParser::ContactInformation> removals
+                = q->m_remoteRemovals.value(addressbookUrl);
         auto appendMatches = [] (const QList<QContact> &contacts,
-                                 const QHash<QString, QHash<QString, ReplyParser::ContactInformation> > &hash,
+                                 const QHash<QString, ReplyParser::ContactInformation> &hash,
                                  QList<QContact> *list) {
             for (const QContact &c : contacts) {
                 const QString uri = c.detail<QContactSyncTarget>().syncTarget();
@@ -995,10 +999,10 @@ void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList
                 }
             }
         };
-        appendMatches(amru.added, q->m_remoteRemovals, &removed);
-        appendMatches(amru.modified, q->m_remoteRemovals, &removed);
-        appendMatches(amru.removed, q->m_remoteRemovals, &removed);
-        appendMatches(amru.unmodified, q->m_remoteRemovals, &removed);
+        appendMatches(amru.added, removals, &removed);
+        appendMatches(amru.modified, removals, &removed);
+        appendMatches(amru.removed, removals, &removed);
+        appendMatches(amru.unmodified, removals, &removed);
 
         // we also need to find the local ids associated with the modified contacts.
         QList<QContact> modifiedWithIds = modified;
