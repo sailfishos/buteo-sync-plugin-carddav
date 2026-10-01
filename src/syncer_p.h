@@ -98,6 +98,7 @@ protected:
             const QList<QContact> &addedContacts,
             const QList<QContact> &modifiedContacts,
             const QList<QContact> &deletedContacts);
+    void startCollectionSync(const QContactCollection &collection, int changeFlag = 0);
     void syncFinishedSuccessfully();
     void syncFinishedWithError();
     void syncOperationError();

@@ -1347,7 +1347,7 @@ void CardDav::upsyncResponse()
             if (!holder.isEmpty()) {
                 resolveUidConflict(reply, QStringList(holder), httpError);
             } else if (!startUidLookup(reply, httpError)) {
-                errorOccurred(httpError);
+                abortUpsync(reply, httpError);
             }
             return;
         }
@@ -1383,10 +1383,10 @@ void CardDav::upsyncResponse()
                 return; // The probe's handler carries on.
             }
             // Failing keeps the change pending; success would clear its flag.
-            errorOccurred(httpError);
+            abortUpsync(reply, httpError);
             return;
         } else {
-            errorOccurred(httpError);
+            abortUpsync(reply, httpError);
             return;
         }
     } else {
@@ -1451,7 +1451,7 @@ void CardDav::deletionProbeResponse()
     if (reply->error() != QNetworkReply::NoError || httpError != 200) {
         qCWarning(lcCardDav) << Q_FUNC_INFO << "could not check" << uri << "(" << httpError
                    << ") - aborting, the deletion stays pending";
-        errorOccurred(httpError);
+        abortUpsync(reply, httpError);
         return;
     }
 
@@ -1460,7 +1460,7 @@ void CardDav::deletionProbeResponse()
         // Unchanged: the 412 is unexplained.
         qCWarning(lcCardDav) << Q_FUNC_INFO << "deletion of" << uri
                    << "refused although unchanged - aborting, the deletion stays pending";
-        errorOccurred(412);
+        abortUpsync(reply, 412);
         return;
     }
 
@@ -1514,7 +1514,7 @@ void CardDav::modificationProbeResponse()
     // Changed elsewhere, or no answer: fail, the next sync merges it.
     qCWarning(lcCardDav) << Q_FUNC_INFO << "conflict on" << uri << "(" << httpError
                << ") - aborting, the next sync merges it";
-    errorOccurred(httpError == 200 ? 412 : httpError);
+    abortUpsync(reply, httpError == 200 ? 412 : httpError);
 }
 
 bool CardDav::startUidLookup(QNetworkReply *refused, int httpError)
@@ -1543,7 +1543,7 @@ void CardDav::uidLookupResponse()
         qCWarning(lcCardDav) << Q_FUNC_INFO << "could not look up the uid of"
                    << reply->property("contactUri").toString() << "(" << httpError
                    << ") - aborting, the modification stays pending";
-        errorOccurred(refusal);
+        abortUpsync(reply, refusal);
         return;
     }
     resolveUidConflict(reply, m_parser->parseHrefs(reply->readAll()), refusal);
@@ -1571,6 +1571,16 @@ void CardDav::resolveUidConflict(QNetworkReply *reply, const QStringList &holder
     qCWarning(lcCardDav) << Q_FUNC_INFO << uri << "cannot be recreated (" << httpError
                << "), and no held contact has its uid:" << holders
                << "- aborting, the modification stays pending";
+    abortUpsync(reply, httpError);
+}
+
+// Logs the contact that stopped the sync, then stops it.
+void CardDav::abortUpsync(QNetworkReply *reply, int httpError)
+{
+    q->recordUpsynced(reply->property("addressbookUrl").toString(), upsyncedUid(reply), upsyncedOperation(reply),
+                      Buteo::TargetResults::ITEM_OPERATION_FAILED,
+                      (httpError ? QStringLiteral("HTTP %1").arg(httpError) : reply->errorString())
+                          + QStringLiteral(" - sync aborted"));
     errorOccurred(httpError);
 }
 

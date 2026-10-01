@@ -408,13 +408,20 @@ void Syncer::storeRemoteChangesLocally(
     stage(modifications, Buteo::TargetResults::ITEM_MODIFIED, true);
     stage(remainingDeletions, Buteo::TargetResults::ITEM_DELETED, false);
 
-    // On failure syncOperationError() drops the staged entries; on success the
-    // sync may finish before this returns, see syncFinishedSuccessfully().
+    // On failure syncOperationError() drops the staged entries.  On success
+    // the next collection or the end of the sync may follow before this
+    // returns, so those commit them first.
     TwoWayContactSyncAdaptor::storeRemoteChangesLocally(collection,
                                                         addedContacts,
                                                         modifications,
                                                         remainingDeletions);
     commitApplied();
+}
+
+void Syncer::startCollectionSync(const QContactCollection &collection, int changeFlag)
+{
+    commitApplied();
+    TwoWayContactSyncAdaptor::startCollectionSync(collection, changeFlag);
 }
 
 void Syncer::commitApplied()
@@ -430,11 +437,12 @@ Buteo::TargetResults &Syncer::resultsFor(const QString &addressbookUrl)
     QHash<QString, Buteo::TargetResults>::Iterator it = m_targetResults.find(addressbookUrl);
     if (it == m_targetResults.end()) {
         // The addressbook's display name if we know it, so that the log names
-        // the same thing the user sees; the url is the fallback.
+        // the same thing the user sees; the last path segment is the fallback.
         QString name = m_currentCollections.value(addressbookUrl)
                 .metaData(QContactCollection::KeyName).toString();
         if (name.isEmpty()) {
-            name = addressbookUrl;
+            // Not the whole path: it usually contains the login.
+            name = addressbookUrl.section(QLatin1Char('/'), -1, -1, QString::SectionSkipEmpty);
         }
         it = m_targetResults.insert(addressbookUrl, Buteo::TargetResults(name));
     }
@@ -475,7 +483,14 @@ void Syncer::recordUpsynced(const QString &addressbookUrl, const QString &uid,
 
 QList<Buteo::TargetResults> Syncer::targetResults() const
 {
-    return m_targetResults.values();
+    // In a stable order, so that consecutive logs compare.
+    QList<Buteo::TargetResults> results;
+    QStringList urls = m_targetResults.keys();
+    urls.sort();
+    for (const QString &url : urls) {
+        results.append(m_targetResults.value(url));
+    }
+    return results;
 }
 
 void Syncer::syncFinishedSuccessfully()
@@ -487,6 +502,7 @@ void Syncer::syncFinishedSuccessfully()
 
 void Syncer::syncFinishedWithError()
 {
+    commitApplied();
     emit syncFailed();
 }
 
