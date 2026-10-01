@@ -50,7 +50,7 @@ namespace {
         if (value.canConvert<QList<int> >()) {
             return value.value<QList<int> >().isEmpty();
         }
-        return value.type() == QVariant::String && value.toString().isEmpty();
+        return value.userType() == QMetaType::QString && value.toString().isEmpty();
     }
 
     // Contexts and subtypes are stored as QList<int>, and a QVariant holding one
@@ -107,8 +107,7 @@ void attachLocalDetailIds(QContact *remote, const QContact &local,
                           const QSet<int> &ignorableCommonFields) {
     const QList<QContactDetail> localDetails = local.details();
 
-    // Without a flagged local detail there is nothing for the merge to
-    // carry over, and an id could then only do harm.
+    // Without a flagged local detail an id could only do harm.
     bool haveLocalChange = false;
     for (const QContactDetail &detail : localDetails) {
         if (detail.value(QContactDetail__FieldChangeFlags).toInt() != 0) {
@@ -230,10 +229,10 @@ void attachLocalDetailIds(QContact *remote, const QContact &local,
     }
 
     // Then the sole remaining candidate of its type on either side.  The
-    // values differ - that is the conflict - but there is only one thing it
-    // can be.  Deletions are left out: equal count is not identity, and a
-    // deletion paired this way would drop a detail the other side has just
-    // changed.
+    // values differ - that is the conflict.  Deletions are left out: equal
+    // count is not identity.  This guesses: a remote replacement, or a remote
+    // change next to a local deletion, looks the same as a change, and then
+    // the local modification wins, as in the adaptor.
     for (int r = 0; r < remoteCount; ++r) {
         if (pairedRemote.contains(r)) {
             continue;
