@@ -96,6 +96,8 @@ void Syncer::startSync(int accountId)
     m_undeleteIds.clear();
     m_keepIds.clear();
     m_targetResults.clear();
+    m_receivedGuids.clear();
+    m_pendingApplied.clear();
     m_auth = new Auth(this);
     connect(m_auth, SIGNAL(signInCompleted(QString,QString,QString,QString,QString,bool)),
             this, SLOT(sync(QString,QString,QString,QString,QString,bool)));
@@ -390,10 +392,37 @@ void Syncer::storeRemoteChangesLocally(
         }
     }
 
+    // Uploaded local changes come back as modifications too; only count what
+    // the server sent.
+    const QSet<QString> received = m_receivedGuids.take(remotePath);
+    auto stage = [&] (const QList<QContact> &contacts,
+                      Buteo::TargetResults::ItemOperation operation, bool onlyReceived) {
+        for (const QContact &c : contacts) {
+            const QString guid = c.detail<QContactGuid>().guid();
+            if (!onlyReceived || received.contains(guid)) {
+                m_pendingApplied.append({ remotePath, guid, operation });
+            }
+        }
+    };
+    stage(addedContacts, Buteo::TargetResults::ITEM_ADDED, false);
+    stage(modifications, Buteo::TargetResults::ITEM_MODIFIED, true);
+    stage(remainingDeletions, Buteo::TargetResults::ITEM_DELETED, false);
+
+    // On failure syncOperationError() drops the staged entries; on success the
+    // sync may finish before this returns, see syncFinishedSuccessfully().
     TwoWayContactSyncAdaptor::storeRemoteChangesLocally(collection,
                                                         addedContacts,
                                                         modifications,
                                                         remainingDeletions);
+    commitApplied();
+}
+
+void Syncer::commitApplied()
+{
+    for (const Applied &applied : m_pendingApplied) {
+        recordApplied(applied.addressbookUrl, applied.uid, applied.operation);
+    }
+    m_pendingApplied.clear();
 }
 
 Buteo::TargetResults &Syncer::resultsFor(const QString &addressbookUrl)
@@ -407,7 +436,7 @@ Buteo::TargetResults &Syncer::resultsFor(const QString &addressbookUrl)
         if (name.isEmpty()) {
             name = addressbookUrl;
         }
-        it = m_targetResults.insert(addressbookUrl, Buteo::TargetResults(name.toHtmlEscaped()));
+        it = m_targetResults.insert(addressbookUrl, Buteo::TargetResults(name));
     }
     return *it;
 }
@@ -451,6 +480,7 @@ QList<Buteo::TargetResults> Syncer::targetResults() const
 
 void Syncer::syncFinishedSuccessfully()
 {
+    commitApplied();
     qCDebug(lcCardDav) << Q_FUNC_INFO << "CardDAV sync with account" << m_accountId << "finished successfully!";
     emit syncSucceeded();
 }
@@ -458,6 +488,12 @@ void Syncer::syncFinishedSuccessfully()
 void Syncer::syncFinishedWithError()
 {
     emit syncFailed();
+}
+
+void Syncer::syncOperationError()
+{
+    m_pendingApplied.clear();
+    TwoWayContactSyncAdaptor::syncOperationError();
 }
 
 void Syncer::cardDavError(int errorCode)

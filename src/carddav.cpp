@@ -983,6 +983,11 @@ void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList
     // Every addressbook that took part gets an entry, so that a sync which
     // changed nothing says so rather than leaving the log silent.
     q->resultsFor(addressbookUrl);
+    for (const QList<QContact> *list : { &added, &modified }) {
+        for (const QContact &c : *list) {
+            q->m_receivedGuids[addressbookUrl].insert(c.detail<QContactGuid>().guid());
+        }
+    }
 
     // at this point, we have already retrieved the added+modified contacts from the server.
     // we need to populate the removed contacts list, by inspecting the local data.
@@ -1054,19 +1059,6 @@ void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList
             held.remove(uri);
         }
         held.remove(QString());
-
-        // Record what is about to be applied locally.  storeChanges() reports
-        // failure for the collection as a whole rather than per contact, so a
-        // failure here ends the sync and the results describe a failed one.
-        auto recordAll = [this, &addressbookUrl] (const QList<QContact> &contacts,
-                                                  Buteo::TargetResults::ItemOperation operation) {
-            for (const QContact &c : contacts) {
-                q->recordApplied(addressbookUrl, c.detail<QContactGuid>().guid(), operation);
-            }
-        };
-        recordAll(added, Buteo::TargetResults::ITEM_ADDED);
-        recordAll(modifiedWithIds, Buteo::TargetResults::ITEM_MODIFIED);
-        recordAll(removed, Buteo::TargetResults::ITEM_DELETED);
 
         // TODO: also match remotely added to locally added, to find partial upsync artifacts.
         q->remoteContactChangesDetermined(q->m_currentCollections[addressbookUrl], added, modifiedWithIds, removed);
@@ -1483,6 +1475,7 @@ void CardDav::deletionProbeResponse()
         // Written once the row is undeleted.
         fetched.setId(contactId);
         m_upsyncedChanges[addressbookUrl].modifications.append(fetched);
+        q->m_receivedGuids[addressbookUrl].insert(fetched.detail<QContactGuid>().guid());
         qCWarning(lcCardDav) << Q_FUNC_INFO << "keeping the server version of" << uri;
     } else {
         qCWarning(lcCardDav) << Q_FUNC_INFO << "could not parse the server version of" << uri
