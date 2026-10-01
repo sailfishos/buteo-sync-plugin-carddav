@@ -47,7 +47,10 @@ public:
     QNetworkReply *contactEtags(const QString &serverUrl, const QString &addressbookPath);
     QNetworkReply *contactData(const QString &serverUrl, const QString &addressbookPath, const QStringList &contactEtags);
     QNetworkReply *contactMultiget(const QString &serverUrl, const QString &addressbookPath, const QStringList &contactUris);
+    QNetworkReply *contactGet(const QString &serverUrl, const QString &contactPath);
+    QNetworkReply *contactsWithUid(const QString &serverUrl, const QString &addressbookPath, const QString &uid);
     QNetworkReply *upsyncAddMod(const QString &serverUrl, const QString &contactPath, const QString &etag, const QString &vcard);
+    QNetworkReply *upsyncRecreate(const QString &serverUrl, const QString &contactPath, const QString &vcard);
     QNetworkReply *upsyncDeletion(const QString &serverUrl, const QString &contactPath, const QString &etag);
 
 private:
@@ -61,7 +64,8 @@ private:
                                          const QString &ifMatch,
                                          const QString &contentType,
                                          const QString &requestType,
-                                         const QString &request) const;
+                                         const QString &request,
+                                         const QString &ifNoneMatch = QString()) const;
     Syncer *q;
     QString m_username;
     QString m_password;

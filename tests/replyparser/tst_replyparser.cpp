@@ -96,6 +96,12 @@ private slots:
     void parseContactData_data();
     void parseContactData();
 
+    void parseNoUidConflict_data();
+    void parseNoUidConflict();
+
+    void parseHrefs_data();
+    void parseHrefs();
+
 private:
     CardDavVCardConverter m_vcc;
     Syncer m_s;
@@ -751,6 +757,138 @@ void tst_replyparser::parseContactData()
         QVERIFY(contactInfo[contactUri].details<QContactName>().size() <= 1);
         QVERIFY(contactInfo[contactUri].details<QContactGuid>().size() <= 1);
     }
+}
+
+void tst_replyparser::parseNoUidConflict_data()
+{
+    QTest::addColumn<QByteArray>("errorResponse");
+    QTest::addColumn<QString>("expectedHref");
+
+    QTest::newRow("empty response")
+        << QByteArray()
+        << QString();
+
+    QTest::newRow("no-uid-conflict as sent by Nextcloud")
+        << QByteArray("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                      "<d:error xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\">"
+                      "<s:exception>OCA\\DAV\\Exception\\UidConflict</s:exception>"
+                      "<s:message>VCard object with uid already exists in this addressbook collection.</s:message>"
+                      "<card:no-uid-conflict xmlns:card=\"urn:ietf:params:xml:ns:carddav\">"
+                      "<d:href>/remote.php/dav/addressbooks/users/johndoe/contacts/John%20Doe.vcf</d:href>"
+                      "</card:no-uid-conflict></d:error>")
+        << QStringLiteral("/remote.php/dav/addressbooks/users/johndoe/contacts/John Doe.vcf");
+
+    QTest::newRow("no-uid-conflict as sent by Nextcloud 33")
+        << QByteArray("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                      "<d:error xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\">\n"
+                      "  <s:exception>OCA\\DAV\\Exception\\UidConflict</s:exception>\n"
+                      "  <s:message>VCard object with uid already exists in this addressbook collection.</s:message>\n"
+                      "  <card:no-uid-conflict xmlns:card=\"urn:ietf:params:xml:ns:carddav\">\n"
+                      "    <d:href xmlns:d=\"DAV:\">/remote.php/dav/addressbooks/users/admin/contacts/moved.vcf</d:href>\n"
+                      "  </card:no-uid-conflict>\n"
+                      "</d:error>\n")
+        << QStringLiteral("/remote.php/dav/addressbooks/users/admin/contacts/moved.vcf");
+
+    QTest::newRow("bare 400 as sent by Nextcloud 31")
+        << QByteArray("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                      "<d:error xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\">\n"
+                      "  <s:exception>Sabre\\DAV\\Exception\\BadRequest</s:exception>\n"
+                      "  <s:message>VCard object with uid already exists in this addressbook collection.</s:message>\n"
+                      "</d:error>\n")
+        << QString();
+
+    QTest::newRow("no-uid-conflict with absolute href")
+        << QByteArray("<D:error xmlns:D=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:carddav\">"
+                      "<C:no-uid-conflict><D:href>https://dav.example.com/addressbooks/johndoe/other.vcf</D:href>"
+                      "</C:no-uid-conflict></D:error>")
+        << QStringLiteral("/addressbooks/johndoe/other.vcf");
+
+    QTest::newRow("bad request without precondition")
+        << QByteArray("<d:error xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\">"
+                      "<s:exception>Sabre\\DAV\\Exception\\BadRequest</s:exception>"
+                      "<s:message>VCard object with uid already exists in this addressbook collection.</s:message>"
+                      "</d:error>")
+        << QString();
+
+    QTest::newRow("no-uid-conflict without href")
+        << QByteArray("<d:error xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">"
+                      "<card:no-uid-conflict/></d:error>")
+        << QString();
+
+    QTest::newRow("no-uid-conflict in the wrong namespace")
+        << QByteArray("<d:error xmlns:d=\"DAV:\" xmlns:cal=\"urn:ietf:params:xml:ns:caldav\">"
+                      "<cal:no-uid-conflict><d:href>/calendars/johndoe/other.ics</d:href>"
+                      "</cal:no-uid-conflict></d:error>")
+        << QString();
+
+    QTest::newRow("html error page")
+        << QByteArray("<html><body><h1>409 Conflict</h1></body></html>")
+        << QString();
+}
+
+void tst_replyparser::parseNoUidConflict()
+{
+    QFETCH(QByteArray, errorResponse);
+    QFETCH(QString, expectedHref);
+
+    QCOMPARE(m_rp.parseNoUidConflict(errorResponse), expectedHref);
+}
+
+void tst_replyparser::parseHrefs_data()
+{
+    QTest::addColumn<QByteArray>("multistatus");
+    QTest::addColumn<QStringList>("expectedHrefs");
+
+    QTest::newRow("empty response")
+        << QByteArray()
+        << QStringList();
+
+    QTest::newRow("no match")
+        << QByteArray("<d:multistatus xmlns:d=\"DAV:\"/>")
+        << QStringList();
+
+    QTest::newRow("one match")
+        << QByteArray("<?xml version=\"1.0\"?>\n"
+                      "<d:multistatus xmlns:d=\"DAV:\">"
+                      "<d:response><d:href>/addressbooks/johndoe/contacts/John%20Doe.vcf</d:href>"
+                      "<d:propstat><d:prop><d:getetag>\"1\"</d:getetag></d:prop>"
+                      "<d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
+                      "</d:multistatus>")
+        << (QStringList() << QStringLiteral("/addressbooks/johndoe/contacts/John Doe.vcf"));
+
+    QTest::newRow("uid lookup as answered by Nextcloud 31")
+        << QByteArray("<?xml version=\"1.0\"?>\n"
+                      "<d:multistatus xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\" "
+                      "xmlns:oc=\"http://owncloud.org/ns\" xmlns:nc=\"http://nextcloud.org/ns\">"
+                      "<d:response><d:href>/remote.php/dav/addressbooks/users/admin/contacts/moved.vcf</d:href>"
+                      "<d:propstat><d:prop><d:getetag>&quot;a03d2aeb35c00145f796abcf092ea247&quot;</d:getetag></d:prop>"
+                      "<d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>")
+        << (QStringList() << QStringLiteral("/remote.php/dav/addressbooks/users/admin/contacts/moved.vcf"));
+
+    QTest::newRow("two matches")
+        << QByteArray("<D:multistatus xmlns:D=\"DAV:\">"
+                      "<D:response><D:href>/ab/a.vcf</D:href></D:response>"
+                      "<D:response><D:href>https://dav.example.com/ab/b.vcf</D:href></D:response>"
+                      "</D:multistatus>")
+        << (QStringList() << QStringLiteral("/ab/a.vcf") << QStringLiteral("/ab/b.vcf"));
+
+    QTest::newRow("truncated")
+        << QByteArray("<d:multistatus xmlns:d=\"DAV:\">"
+                      "<d:response><d:href>/ab/a.vcf</d:href></d:response>"
+                      "<d:response><d:href>/ab/b")
+        << QStringList();
+
+    QTest::newRow("error instead of multistatus")
+        << QByteArray("<d:error xmlns:d=\"DAV:\"><d:href>/ab/a.vcf</d:href></d:error>")
+        << QStringList();
+}
+
+void tst_replyparser::parseHrefs()
+{
+    QFETCH(QByteArray, multistatus);
+    QFETCH(QStringList, expectedHrefs);
+
+    QCOMPARE(m_rp.parseHrefs(multistatus), expectedHrefs);
 }
 
 #include "tst_replyparser.moc"

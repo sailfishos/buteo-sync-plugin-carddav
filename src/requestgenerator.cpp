@@ -74,7 +74,8 @@ namespace {
                                    const QString &depth,
                                    const QString &ifMatch,
                                    const QString &contentType,
-                                   const QString &accessToken)
+                                   const QString &accessToken,
+                                   const QString &ifNoneMatch = QString())
     {
         QNetworkRequest ret(url);
         if (!contentType.isEmpty()) {
@@ -88,6 +89,9 @@ namespace {
         }
         if (!ifMatch.isEmpty()) {
             ret.setRawHeader("If-Match", ifMatch.toUtf8());
+        }
+        if (!ifNoneMatch.isEmpty()) {
+            ret.setRawHeader("If-None-Match", ifNoneMatch.toUtf8());
         }
         if (!accessToken.isEmpty()) {
             ret.setRawHeader("Authorization",
@@ -137,11 +141,12 @@ QNetworkReply *RequestGenerator::generateUpsyncRequest(const QString &url,
                                                        const QString &ifMatch,
                                                        const QString &contentType,
                                                        const QString &requestType,
-                                                       const QString &request) const
+                                                       const QString &request,
+                                                       const QString &ifNoneMatch) const
 {
     QByteArray requestData(request.toUtf8());
     QUrl reqUrl(setRequestUrl(url, path, m_username, m_password));
-    QNetworkRequest req(setRequestData(reqUrl, requestData, QString(), ifMatch, contentType, m_accessToken));
+    QNetworkRequest req(setRequestData(reqUrl, requestData, QString(), ifMatch, contentType, m_accessToken, ifNoneMatch));
 
     qCDebug(lcCardDav) << "generateUpsyncRequest():" << m_accessToken << reqUrl << requestType << ":" << requestData.length() << "bytes";
     Q_FOREACH (const QByteArray &headerName, req.rawHeaderList()) {
@@ -380,6 +385,55 @@ QNetworkReply *RequestGenerator::contactMultiget(const QString &serverUrl, const
     return generateRequest(serverUrl, addressbookPath, QLatin1String("1"), QLatin1String("REPORT"), requestStr);
 }
 
+QNetworkReply *RequestGenerator::contactGet(const QString &serverUrl, const QString &contactPath)
+{
+    if (Q_UNLIKELY(contactPath.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "contact uri empty, aborting";
+        return 0;
+    }
+
+    if (Q_UNLIKELY(serverUrl.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "server url empty, aborting";
+        return 0;
+    }
+
+    return generateUpsyncRequest(serverUrl, contactPath, QString(), QString(),
+                                 QStringLiteral("GET"), QString());
+}
+
+// RFC 6352 8.6; a server without i;octet fails it, which aborts.
+QNetworkReply *RequestGenerator::contactsWithUid(const QString &serverUrl, const QString &addressbookPath, const QString &uid)
+{
+    if (Q_UNLIKELY(uid.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "uid empty, aborting";
+        return 0;
+    }
+
+    if (Q_UNLIKELY(addressbookPath.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "addressbook path empty, aborting";
+        return 0;
+    }
+
+    if (Q_UNLIKELY(serverUrl.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "server url empty, aborting";
+        return 0;
+    }
+
+    const QString requestStr = QStringLiteral(
+        "<card:addressbook-query xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">"
+            "<d:prop>"
+                "<d:getetag />"
+            "</d:prop>"
+            "<card:filter>"
+                "<card:prop-filter name=\"UID\">"
+                    "<card:text-match collation=\"i;octet\" match-type=\"equals\">%1</card:text-match>"
+                "</card:prop-filter>"
+            "</card:filter>"
+        "</card:addressbook-query>").arg(uid.toHtmlEscaped());
+
+    return generateRequest(serverUrl, addressbookPath, QLatin1String("1"), QLatin1String("REPORT"), requestStr);
+}
+
 QNetworkReply *RequestGenerator::upsyncAddMod(const QString &serverUrl, const QString &contactPath, const QString &etag, const QString &vcard)
 {
     if (Q_UNLIKELY(vcard.isEmpty())) {
@@ -402,6 +456,29 @@ QNetworkReply *RequestGenerator::upsyncAddMod(const QString &serverUrl, const QS
     return generateUpsyncRequest(serverUrl, contactPath, etag,
                                  QStringLiteral("text/vcard; charset=utf-8"),
                                  QStringLiteral("PUT"), vcard);
+}
+
+// Only succeeds if nothing exists at contactPath.
+QNetworkReply *RequestGenerator::upsyncRecreate(const QString &serverUrl, const QString &contactPath, const QString &vcard)
+{
+    if (Q_UNLIKELY(vcard.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "vcard empty, aborting";
+        return 0;
+    }
+
+    if (Q_UNLIKELY(contactPath.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "contact uri empty, aborting";
+        return 0;
+    }
+
+    if (Q_UNLIKELY(serverUrl.isEmpty())) {
+        qCWarning(lcCardDav) << Q_FUNC_INFO << "server url empty, aborting";
+        return 0;
+    }
+
+    return generateUpsyncRequest(serverUrl, contactPath, QString(),
+                                 QStringLiteral("text/vcard; charset=utf-8"),
+                                 QStringLiteral("PUT"), vcard, QStringLiteral("*"));
 }
 
 QNetworkReply *RequestGenerator::upsyncDeletion(const QString &serverUrl, const QString &contactPath, const QString &etag)

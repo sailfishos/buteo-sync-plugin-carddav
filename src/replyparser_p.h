@@ -91,6 +91,8 @@ public:
     QHash<QString, QContact> parseContactData(const QByteArray &contactData, const QString &addressbookUrl) const;
     QContact buildContact(const QString &vcard, const QString &addressbookUrl,
                           const QString &uri, const QString &etag, bool *ok) const;
+    QString parseNoUidConflict(const QByteArray &errorResponse) const;
+    QStringList parseHrefs(const QByteArray &multistatus) const;
 
 private:
     Syncer *q;

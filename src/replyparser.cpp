@@ -31,6 +31,7 @@
 #include <QXmlStreamReader>
 #include <QByteArray>
 #include <QRegularExpression>
+#include <QUrl>
 
 #include <QContactGuid>
 #include <QContactSyncTarget>
@@ -789,3 +790,70 @@ QHash<QString, QContact> ReplyParser::parseContactData(const QByteArray &contact
     return uriToContactData;
 }
 
+
+// Path of an href, decoded like those of a multistatus response.
+static QString hrefPath(const QString &text)
+{
+    const QUrl href(text.trimmed());
+    if (!href.isValid() || href.path().isEmpty()) {
+        return QString();
+    }
+    return QUrl::fromPercentEncoding(href.path(QUrl::FullyEncoded).toUtf8());
+}
+
+// Href in a CARDDAV:no-uid-conflict error (RFC 6352 6.3.2.1), or empty.
+QString ReplyParser::parseNoUidConflict(const QByteArray &errorResponse) const
+{
+    const QString davNs = QStringLiteral("DAV:");
+    const QString cardDavNs = QStringLiteral("urn:ietf:params:xml:ns:carddav");
+    QXmlStreamReader reader(errorResponse);
+    if (!reader.readNextStartElement()
+            || reader.namespaceUri() != davNs || reader.name() != QLatin1String("error")) {
+        return QString();
+    }
+    while (reader.readNextStartElement()) {
+        if (reader.namespaceUri() != cardDavNs || reader.name() != QLatin1String("no-uid-conflict")) {
+            reader.skipCurrentElement();
+            continue;
+        }
+        while (reader.readNextStartElement()) {
+            if (reader.namespaceUri() != davNs || reader.name() != QLatin1String("href")) {
+                reader.skipCurrentElement();
+                continue;
+            }
+            const QString text = reader.readElementText();
+            return reader.hasError() ? QString() : hrefPath(text);
+        }
+        return QString();
+    }
+    return QString();
+}
+
+// Hrefs of the responses in a multistatus; empty if it is malformed.
+QStringList ReplyParser::parseHrefs(const QByteArray &multistatus) const
+{
+    const QString davNs = QStringLiteral("DAV:");
+    QStringList hrefs;
+    QXmlStreamReader reader(multistatus);
+    if (!reader.readNextStartElement()
+            || reader.namespaceUri() != davNs || reader.name() != QLatin1String("multistatus")) {
+        return QStringList();
+    }
+    while (reader.readNextStartElement()) {
+        if (reader.namespaceUri() != davNs || reader.name() != QLatin1String("response")) {
+            reader.skipCurrentElement();
+            continue;
+        }
+        while (reader.readNextStartElement()) {
+            if (reader.namespaceUri() == davNs && reader.name() == QLatin1String("href")) {
+                const QString path = hrefPath(reader.readElementText());
+                if (!path.isEmpty()) {
+                    hrefs.append(path);
+                }
+            } else {
+                reader.skipCurrentElement();
+            }
+        }
+    }
+    return reader.hasError() ? QStringList() : hrefs;
+}
