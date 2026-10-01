@@ -1001,7 +1001,8 @@ void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList
         };
         appendMatches(amru.added, removals, &removed);
         appendMatches(amru.modified, removals, &removed);
-        appendMatches(amru.removed, removals, &removed);
+        // Not amru.removed: deleted on both sides needs nothing locally, and
+        // ContactWriter::remove() fails on a row already flagged as deleted.
         appendMatches(amru.unmodified, removals, &removed);
 
         // we also need to find the local ids associated with the modified contacts.
