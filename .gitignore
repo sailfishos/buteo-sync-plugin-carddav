@@ -5,3 +5,4 @@ moc_*
 *.moc
 .qmake.stash
 tests/replyparser/tst_replyparser
+tests/detailpairing/tst_detailpairing

@@ -52,6 +52,7 @@ This package contains unit tests for the CardDAV Buteo sync plugin.
 /opt/tests/buteo/plugins/carddav/cdavtool
 /opt/tests/buteo/plugins/carddav/tests.xml
 /opt/tests/buteo/plugins/carddav/tst_replyparser
+/opt/tests/buteo/plugins/carddav/tst_detailpairing
 /opt/tests/buteo/plugins/carddav/data/replyparser_userprincipal_empty.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_userprincipal_single-well-formed.xml
 /opt/tests/buteo/plugins/carddav/data/replyparser_addressbookhome_empty.xml
