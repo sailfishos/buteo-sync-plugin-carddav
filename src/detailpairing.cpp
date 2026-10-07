@@ -228,11 +228,8 @@ void attachLocalDetailIds(QContact *remote, const QContact &local,
         }
     }
 
-    // Then the sole remaining candidate of its type on either side.  The
-    // values differ - that is the conflict.  Deletions are left out: equal
-    // count is not identity.  This guesses: a remote replacement, or a remote
-    // change next to a local deletion, looks the same as a change, and then
-    // the local modification wins, as in the adaptor.
+    // Then the sole remaining candidate of its type on either side, unless an
+    // unpaired local deletion of the type could be the remote detail's identity.
     for (int r = 0; r < remoteCount; ++r) {
         if (pairedRemote.contains(r)) {
             continue;
@@ -249,19 +246,23 @@ void attachLocalDetailIds(QContact *remote, const QContact &local,
         }
         int candidates = 0;
         int candidate = -1;
+        bool unpairedDeletion = false;
         for (int l = 0; l < localDetails.size(); ++l) {
             if (pairedLocal.contains(l) || localDetails.at(l).type() != type) {
                 continue;
             }
             const int flags = changeFlags(l);
-            if ((flags & QContactDetail__ChangeFlag_IsDeleted) > 0
-                    || (flags & QContactDetail__ChangeFlag_IsAdded) > 0) {
+            if ((flags & QContactDetail__ChangeFlag_IsDeleted) > 0) {
+                unpairedDeletion = true;
+                continue;
+            }
+            if ((flags & QContactDetail__ChangeFlag_IsAdded) > 0) {
                 continue;
             }
             ++candidates;
             candidate = l;
         }
-        if (unpairedRemote == 1 && candidates == 1) {
+        if (unpairedRemote == 1 && candidates == 1 && !unpairedDeletion) {
             pairUp(r, candidate);
         }
     }

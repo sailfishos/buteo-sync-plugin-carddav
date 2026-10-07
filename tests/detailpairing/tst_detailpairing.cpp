@@ -100,7 +100,7 @@ private slots:
     void modificationSoleCandidate();
     void duplicateRemoteValue();
     void soleCandidateNextToLocalDeletion();
-    void soleCandidateGuessesLocalWins();
+    void soleCandidateNextToRemoteChange();
     void contextsCompareByValue();
     void ignorableFieldsIgnored();
 };
@@ -175,23 +175,22 @@ void tst_detailpairing::duplicateRemoteValue()
     QCOMPARE(ids.values("a@x"), QList<quint32>({ 0u, 0u }));
 }
 
-// Here a2, deleted b; there b deleted too.  a2 changes a.
+// Here a2, deleted b; there b deleted too.  Looks like the case below: unpaired.
 void tst_detailpairing::soleCandidateNextToLocalDeletion()
 {
     const QMultiMap<QString, quint32> ids = attached(
             localContact({ { "a2@x", 1, Modified }, { "b@x", 2, Deleted } }),
             remoteContact({ "a@x" }));
-    QCOMPARE(ids.value("a@x"), 1u);
+    QCOMPARE(ids.value("a@x"), 0u);
 }
 
-// Here a2, deleted b; there a removed, b changed to b2.  Indistinguishable
-// from the case above: the local modification wins and b2 is lost.
-void tst_detailpairing::soleCandidateGuessesLocalWins()
+// Here a2, deleted b; there a removed, b changed to b2: no guess, the remote version stands.
+void tst_detailpairing::soleCandidateNextToRemoteChange()
 {
     const QMultiMap<QString, quint32> ids = attached(
             localContact({ { "a2@x", 1, Modified }, { "b@x", 2, Deleted } }),
             remoteContact({ "b2@x" }));
-    QCOMPARE(ids.value("b2@x"), 1u);
+    QCOMPARE(ids.value("b2@x"), 0u);
 }
 
 void tst_detailpairing::contextsCompareByValue()
