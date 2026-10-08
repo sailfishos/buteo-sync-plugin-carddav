@@ -98,10 +98,16 @@ private Q_SLOTS:
     void contactMetadataResponse();
     void contactsResponse();
     void upsyncResponse();
+    void deletionProbeResponse();
+    void modificationProbeResponse();
+    void uidLookupResponse();
     void upsyncComplete(const QString &addressbookUrl);
     void errorOccurred(int httpError);
 
 private:
+    bool startProbe(QNetworkReply *refused, const char *slot, bool afterRecreation = false);
+    bool startUidLookup(QNetworkReply *refused, int httpError);
+    void resolveUidConflict(QNetworkReply *reply, const QStringList &holders, int httpError);
     void calculateContactChanges(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified);
 
     enum DiscoveryStage {
@@ -126,6 +132,9 @@ private:
     };
     QHash<QString, UpsyncedContacts> m_upsyncedChanges;
     QHash<QString, int> m_upsyncRequests;
+
+    // Per addressbook: uris of contacts held locally or downloaded, not being deleted.
+    QHash<QString, QSet<QString> > m_heldUris;
 };
 
 class CardDavVCardConverter : public QVersitContactImporterPropertyHandlerV2,
