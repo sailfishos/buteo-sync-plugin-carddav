@@ -7,6 +7,9 @@
            <case manual="false" name="tst_replyparser">
                <step>/usr/sbin/run-blts-root /bin/su -g privileged -c '/opt/tests/buteo/plugins/carddav/tst_replyparser' nemo</step>
            </case>
+           <case manual="false" name="tst_detailpairing">
+               <step>/opt/tests/buteo/plugins/carddav/tst_detailpairing</step>
+           </case>
        </set>
    </suite>
 </testdefinition>

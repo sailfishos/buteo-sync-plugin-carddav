@@ -24,6 +24,7 @@
 #include "syncer_p.h"
 
 #include "logging.h"
+#include "detailpairing_p.h"
 
 #include <QRegularExpression>
 #include <QUuid>
@@ -80,15 +81,16 @@ namespace {
         }
     }
 
-    QContactId matchingContactFromList(const QContact &c, const QList<QContact> &contacts) {
+    const QContact *matchingContactFromList(const QContact &c, const QList<QContact> &contacts) {
         const QString uri = c.detail<QContactSyncTarget>().syncTarget();
         for (const QContact &other : contacts) {
             if (!uri.isEmpty() && uri == other.detail<QContactSyncTarget>().syncTarget()) {
-                return other.id();
+                return &other;
             }
         }
-        return QContactId();
+        return nullptr;
     }
+
 }
 
 CardDavVCardConverter::CardDavVCardConverter()
@@ -1007,15 +1009,33 @@ void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList
         appendMatches(amru.unmodified, removals, &removed);
 
         // we also need to find the local ids associated with the modified contacts.
+        const QtContactsSqliteExtensions::TwoWayContactSyncAdaptor::IgnorableDetailsAndFields ignorable
+                = q->ignorableDetailsAndFields();
         QList<QContact> modifiedWithIds = modified;
         for (int i = 0; i < modifiedWithIds.size(); ++i) {
             QContact &c(modifiedWithIds[i]);
-            QContactId matchingId = matchingContactFromList(c, amru.added);
-            if (matchingId.isNull()) matchingId = matchingContactFromList(c, amru.modified);
-            if (matchingId.isNull()) matchingId = matchingContactFromList(c, amru.removed);
-            if (matchingId.isNull()) matchingId = matchingContactFromList(c, amru.unmodified);
-            if (!matchingId.isNull()) {
-                c.setId(matchingId);
+            const QContact *match = matchingContactFromList(c, amru.added);
+            // Only the modified and the unmodified contacts are handed to
+            // resolveConflictingChanges(); attaching detail ids for the others
+            // would put row ids on details nothing looks up.
+            bool mergeable = false;
+            if (!match) {
+                match = matchingContactFromList(c, amru.modified);
+                mergeable = match != nullptr;
+            }
+            if (!match) match = matchingContactFromList(c, amru.removed);
+            if (!match) {
+                match = matchingContactFromList(c, amru.unmodified);
+                mergeable = match != nullptr;
+            }
+            if (match) {
+                c.setId(match->id());
+                if (mergeable) {
+                    attachLocalDetailIds(&c, *match,
+                                         ignorable.detailTypes,
+                                         ignorable.detailFields,
+                                         ignorable.commonFields);
+                }
             }
         }
 

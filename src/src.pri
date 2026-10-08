@@ -29,6 +29,7 @@ SOURCES += \
     $$PWD/carddav.cpp \
     $$PWD/requestgenerator.cpp \
     $$PWD/replyparser.cpp \
+    $$PWD/detailpairing.cpp \
     $$PWD/logging.cpp
 
 HEADERS += \
@@ -39,6 +40,7 @@ HEADERS += \
     $$PWD/carddav_p.h \
     $$PWD/requestgenerator_p.h \
     $$PWD/replyparser_p.h \
+    $$PWD/detailpairing_p.h \
     $$PWD/logging.h \
 
 OTHER_FILES += \

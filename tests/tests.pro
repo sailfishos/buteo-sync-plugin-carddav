@@ -1,5 +1,5 @@
 TEMPLATE=subdirs
-SUBDIRS+=replyparser
+SUBDIRS+=replyparser detailpairing
 
 OTHER_FILES+=tests.xml
 tests_xml.path=/opt/tests/buteo/plugins/carddav/

@@ -1,0 +1,11 @@
+TEMPLATE = app
+TARGET = tst_detailpairing
+QT -= gui
+QT += testlib
+CONFIG += link_pkgconfig
+PKGCONFIG += Qt$${QT_MAJOR_VERSION}Contacts qtcontacts-sqlite-qt$${QT_MAJOR_VERSION}-extensions
+INCLUDEPATH += $$PWD/../../src
+SOURCES += tst_detailpairing.cpp $$PWD/../../src/detailpairing.cpp
+HEADERS += $$PWD/../../src/detailpairing_p.h
+target.path = /opt/tests/buteo/plugins/carddav/
+INSTALLS += target
