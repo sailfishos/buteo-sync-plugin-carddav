@@ -112,6 +112,7 @@ QStringList CardDavVCardConverter::supportedPropertyNames()
                         << "N" << "FN" << "NICKNAME" << "BDAY" << "X-GENDER"
                         << "EMAIL" << "TEL" << "ADR" << "URL" << "PHOTO"
                         << "ORG" << "TITLE" << "ROLE"
+                        << "X-SIP" << "X-JABBER"
                         << "NOTE" << "UID";
     return supportedProperties;
 }
