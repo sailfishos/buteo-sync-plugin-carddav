@@ -27,6 +27,8 @@
 
 #include <twowaycontactsyncadaptor.h>
 
+#include <TargetResults.h>
+
 #include <QObject>
 #include <QDateTime>
 #include <QString>
@@ -60,6 +62,10 @@ public:
     void purgeAccount(int accountId);
     void abortSync();
 
+    // Per-addressbook outcome of the sync, one entry per contact, for the
+    // sync log.  Empty until the first change has been recorded.
+    QList<Buteo::TargetResults> targetResults() const;
+
 Q_SIGNALS:
     void syncSucceeded();
     void syncFailed();
@@ -92,8 +98,10 @@ protected:
             const QList<QContact> &addedContacts,
             const QList<QContact> &modifiedContacts,
             const QList<QContact> &deletedContacts);
+    void startCollectionSync(const QContactCollection &collection, int changeFlag = 0);
     void syncFinishedSuccessfully();
     void syncFinishedWithError();
+    void syncOperationError();
 
 private Q_SLOTS:
     void sync(const QString &serverUrl, const QString &addressbookPath, const QString &username, const QString &password, const QString &accessToken, bool ignoreSslErrors);
@@ -147,6 +155,31 @@ private:
 
     // Remote removals overruled by a local modification, per addressbook url.
     QHash<QString, QSet<QContactId> > m_keepIds;
+
+    // What happened to each contact, per addressbook url.
+    void recordApplied(const QString &addressbookUrl, const QString &uid,
+                       Buteo::TargetResults::ItemOperation operation,
+                       Buteo::TargetResults::ItemOperationStatus status
+                           = Buteo::TargetResults::ITEM_OPERATION_SUCCEEDED,
+                       const QString &message = QString());
+    void recordUpsynced(const QString &addressbookUrl, const QString &uid,
+                        Buteo::TargetResults::ItemOperation operation,
+                        Buteo::TargetResults::ItemOperationStatus status
+                            = Buteo::TargetResults::ITEM_OPERATION_SUCCEEDED,
+                        const QString &message = QString());
+    Buteo::TargetResults &resultsFor(const QString &addressbookUrl);
+    void commitApplied();
+    QHash<QString, Buteo::TargetResults> m_targetResults;
+
+    // Guids the server sent this sync, per addressbook url.
+    QHash<QString, QSet<QString> > m_receivedGuids;
+    // Remote changes handed to storeChanges(), recorded once it has succeeded.
+    struct Applied {
+        QString addressbookUrl;
+        QString uid;
+        Buteo::TargetResults::ItemOperation operation;
+    };
+    QList<Applied> m_pendingApplied;
 };
 
 #endif // SYNCER_P_H

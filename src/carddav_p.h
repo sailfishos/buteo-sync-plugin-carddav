@@ -108,6 +108,7 @@ private:
     bool startProbe(QNetworkReply *refused, const char *slot, bool afterRecreation = false);
     bool startUidLookup(QNetworkReply *refused, int httpError);
     void resolveUidConflict(QNetworkReply *reply, const QStringList &holders, int httpError);
+    void abortUpsync(QNetworkReply *reply, int httpError);
     void calculateContactChanges(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified);
 
     enum DiscoveryStage {

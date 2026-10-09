@@ -980,6 +980,15 @@ void CardDav::contactsResponse()
 
 void CardDav::calculateContactChanges(const QString &addressbookUrl, const QList<QContact> &added, const QList<QContact> &modified)
 {
+    // Every addressbook that took part gets an entry, so that a sync which
+    // changed nothing says so rather than leaving the log silent.
+    q->resultsFor(addressbookUrl);
+    for (const QList<QContact> *list : { &added, &modified }) {
+        for (const QContact &c : *list) {
+            q->m_receivedGuids[addressbookUrl].insert(c.detail<QContactGuid>().guid());
+        }
+    }
+
     // at this point, we have already retrieved the added+modified contacts from the server.
     // we need to populate the removed contacts list, by inspecting the local data.
     if (!q->m_collectionAMRU.contains(addressbookUrl)) {
@@ -1067,6 +1076,26 @@ static void removeUpsyncedContact(QList<QContact> *list, const QContactId &id)
     }
 }
 
+// Which contact an upsync request was for, and what it was trying to do, so
+// that its outcome can be reported once the reply arrives.
+static void setReportedChange(QNetworkReply *reply, const QString &uid,
+                              Buteo::TargetResults::ItemOperation operation)
+{
+    reply->setProperty("reportUid", uid);
+    reply->setProperty("reportOperation", static_cast<int>(operation));
+}
+
+static QString upsyncedUid(QNetworkReply *reply)
+{
+    return reply->property("reportUid").toString();
+}
+
+static Buteo::TargetResults::ItemOperation upsyncedOperation(QNetworkReply *reply)
+{
+    return static_cast<Buteo::TargetResults::ItemOperation>(
+            reply->property("reportOperation").toInt());
+}
+
 static void setContactGuid(QContact *c, const QString &uid)
 {
     QContactGuid newGuid = c->detail<QContactGuid>();
@@ -1088,7 +1117,8 @@ bool CardDav::startProbe(QNetworkReply *refused, const char *slot, bool afterRec
     if (!probe) {
         return false;
     }
-    for (const char *name : { "addressbookUrl", "contactUri", "contactGuid", "contactUid", "contactId", "vcard", "etag" }) {
+    for (const char *name : { "addressbookUrl", "contactUri", "contactGuid", "contactUid", "contactId", "vcard", "etag",
+                              "reportUid", "reportOperation" }) {
         probe->setProperty(name, refused->property(name));
     }
     probe->setProperty("afterRecreation", afterRecreation);
@@ -1153,6 +1183,7 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         hadNonSpuriousChanges = true;
         reply->setProperty("addressbookUrl", addressbookUrl);
         reply->setProperty("contactGuid", guid);
+        setReportedChange(reply, guid, Buteo::TargetResults::ITEM_ADDED);
         connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
         connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
     }
@@ -1225,6 +1256,7 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         reply->setProperty("vcard", vcard);
         reply->setProperty("isModification", !removedRemotely);
         reply->setProperty("isRecreation", removedRemotely);
+        setReportedChange(reply, guidstr, Buteo::TargetResults::ITEM_MODIFIED);
         connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
         connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
     }
@@ -1236,6 +1268,9 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         const QString uri = c.detail<QContactSyncTarget>().syncTarget();
         if (uri.isEmpty()) {
             qCWarning(lcCardDav) << Q_FUNC_INFO << "deleted contact server uri unknown:" << QString::fromLatin1(c.id().localId()) << " - " << guidstr;
+            q->recordUpsynced(addressbookUrl, guidstr, Buteo::TargetResults::ITEM_DELETED,
+                              Buteo::TargetResults::ITEM_OPERATION_FAILED,
+                              QStringLiteral("no server uri known for this contact"));
             continue; // TODO: this is actually an error.
         }
 
@@ -1244,6 +1279,9 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
             qCWarning(lcCardDav) << Q_FUNC_INFO << "local deletion of" << uri
                        << "conflicts with a remote modification - keeping the remote version";
             q->m_undeleteIds[addressbookUrl].insert(c.id());
+            q->recordUpsynced(addressbookUrl, guidstr, Buteo::TargetResults::ITEM_DELETED,
+                              Buteo::TargetResults::ITEM_OPERATION_FAILED,
+                              QStringLiteral("modified on the server - kept the server version"));
             continue;
         }
 
@@ -1267,6 +1305,7 @@ bool CardDav::upsyncUpdates(const QString &addressbookUrl, const QList<QContact>
         reply->setProperty("contactUri", uri);
         reply->setProperty("etag", etag);
         reply->setProperty("contactId", QVariant::fromValue(c.id()));
+        setReportedChange(reply, guidstr, Buteo::TargetResults::ITEM_DELETED);
         connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsOccurred(QList<QSslError>)));
         connect(reply, SIGNAL(finished()), this, SLOT(upsyncResponse()));
     }
@@ -1308,7 +1347,7 @@ void CardDav::upsyncResponse()
             if (!holder.isEmpty()) {
                 resolveUidConflict(reply, QStringList(holder), httpError);
             } else if (!startUidLookup(reply, httpError)) {
-                errorOccurred(httpError);
+                abortUpsync(reply, httpError);
             }
             return;
         }
@@ -1324,10 +1363,14 @@ void CardDav::upsyncResponse()
                 q->m_keepIds[addressbookUrl].remove(contactId);
                 removeUpsyncedContact(&m_upsyncedChanges[addressbookUrl].modifications, contactId);
             }
+            q->recordUpsynced(addressbookUrl, upsyncedUid(reply), upsyncedOperation(reply),
+                              Buteo::TargetResults::ITEM_OPERATION_FAILED,
+                              QStringLiteral("405 Method Not Allowed - the collection may be read-only"));
         } else if (isDeletion && (httpError == 404 || httpError == 410)) {
             // Already gone - the outcome we wanted.
             qCWarning(lcCardDav) << Q_FUNC_INFO << "contact already removed server-side (" << httpError
                        << ") - treating deletion as successful";
+            q->recordUpsynced(addressbookUrl, upsyncedUid(reply), upsyncedOperation(reply));
         } else if (httpError == 412
                    && (isDeletion || reply->property("isModification").toBool() || isRecreation)) {
             // Changed or gone (SabreDAV answers both with 412): look.
@@ -1340,12 +1383,14 @@ void CardDav::upsyncResponse()
                 return; // The probe's handler carries on.
             }
             // Failing keeps the change pending; success would clear its flag.
-            errorOccurred(httpError);
+            abortUpsync(reply, httpError);
             return;
         } else {
-            errorOccurred(httpError);
+            abortUpsync(reply, httpError);
             return;
         }
+    } else {
+        q->recordUpsynced(addressbookUrl, upsyncedUid(reply), upsyncedOperation(reply));
     }
 
     if (!guid.isEmpty()) {
@@ -1398,6 +1443,7 @@ void CardDav::deletionProbeResponse()
     if (httpError == 404 || httpError == 410) {
         qCWarning(lcCardDav) << Q_FUNC_INFO << "contact" << uri
                    << "is gone server-side - treating deletion as successful";
+        q->recordUpsynced(addressbookUrl, upsyncedUid(reply), upsyncedOperation(reply));
         upsyncComplete(addressbookUrl);
         return;
     }
@@ -1405,7 +1451,7 @@ void CardDav::deletionProbeResponse()
     if (reply->error() != QNetworkReply::NoError || httpError != 200) {
         qCWarning(lcCardDav) << Q_FUNC_INFO << "could not check" << uri << "(" << httpError
                    << ") - aborting, the deletion stays pending";
-        errorOccurred(httpError);
+        abortUpsync(reply, httpError);
         return;
     }
 
@@ -1414,18 +1460,22 @@ void CardDav::deletionProbeResponse()
         // Unchanged: the 412 is unexplained.
         qCWarning(lcCardDav) << Q_FUNC_INFO << "deletion of" << uri
                    << "refused although unchanged - aborting, the deletion stays pending";
-        errorOccurred(412);
+        abortUpsync(reply, 412);
         return;
     }
 
     // Changed elsewhere: the modification wins.
     q->m_undeleteIds[addressbookUrl].insert(contactId);
+    q->recordUpsynced(addressbookUrl, upsyncedUid(reply), upsyncedOperation(reply),
+                      Buteo::TargetResults::ITEM_OPERATION_FAILED,
+                      QStringLiteral("modified on the server - kept the server version"));
     bool ok = true;
     QContact fetched = m_parser->buildContact(QString::fromUtf8(data), addressbookUrl, uri, etag, &ok);
     if (ok) {
         // Written once the row is undeleted.
         fetched.setId(contactId);
         m_upsyncedChanges[addressbookUrl].modifications.append(fetched);
+        q->m_receivedGuids[addressbookUrl].insert(fetched.detail<QContactGuid>().guid());
         qCWarning(lcCardDav) << Q_FUNC_INFO << "keeping the server version of" << uri;
     } else {
         qCWarning(lcCardDav) << Q_FUNC_INFO << "could not parse the server version of" << uri
@@ -1450,7 +1500,8 @@ void CardDav::modificationProbeResponse()
             qCWarning(lcCardDav) << Q_FUNC_INFO << "contact" << uri
                        << "is gone server-side - recreating it from the local version";
             q->m_keepIds[addressbookUrl].insert(contactId);
-            for (const char *name : { "addressbookUrl", "contactUri", "contactGuid", "contactUid", "contactId", "vcard" }) {
+            for (const char *name : { "addressbookUrl", "contactUri", "contactGuid", "contactUid", "contactId", "vcard",
+                                      "reportUid", "reportOperation" }) {
                 recreate->setProperty(name, reply->property(name));
             }
             recreate->setProperty("isRecreation", true);
@@ -1463,7 +1514,7 @@ void CardDav::modificationProbeResponse()
     // Changed elsewhere, or no answer: fail, the next sync merges it.
     qCWarning(lcCardDav) << Q_FUNC_INFO << "conflict on" << uri << "(" << httpError
                << ") - aborting, the next sync merges it";
-    errorOccurred(httpError == 200 ? 412 : httpError);
+    abortUpsync(reply, httpError == 200 ? 412 : httpError);
 }
 
 bool CardDav::startUidLookup(QNetworkReply *refused, int httpError)
@@ -1473,7 +1524,7 @@ bool CardDav::startUidLookup(QNetworkReply *refused, int httpError)
     if (!lookup) {
         return false;
     }
-    for (const char *name : { "addressbookUrl", "contactUri", "contactId" }) {
+    for (const char *name : { "addressbookUrl", "contactUri", "contactId", "reportUid", "reportOperation" }) {
         lookup->setProperty(name, refused->property(name));
     }
     lookup->setProperty("refusal", httpError);
@@ -1492,7 +1543,7 @@ void CardDav::uidLookupResponse()
         qCWarning(lcCardDav) << Q_FUNC_INFO << "could not look up the uid of"
                    << reply->property("contactUri").toString() << "(" << httpError
                    << ") - aborting, the modification stays pending";
-        errorOccurred(refusal);
+        abortUpsync(reply, refusal);
         return;
     }
     resolveUidConflict(reply, m_parser->parseHrefs(reply->readAll()), refusal);
@@ -1510,6 +1561,9 @@ void CardDav::resolveUidConflict(QNetworkReply *reply, const QStringList &holder
             const QContactId contactId = reply->property("contactId").value<QContactId>();
             q->m_keepIds[addressbookUrl].remove(contactId);
             removeUpsyncedContact(&m_upsyncedChanges[addressbookUrl].modifications, contactId);
+            q->recordUpsynced(addressbookUrl, upsyncedUid(reply), upsyncedOperation(reply),
+                              Buteo::TargetResults::ITEM_OPERATION_FAILED,
+                              QStringLiteral("uid now at another contact - dropped the local change"));
             upsyncComplete(addressbookUrl);
             return;
         }
@@ -1517,6 +1571,16 @@ void CardDav::resolveUidConflict(QNetworkReply *reply, const QStringList &holder
     qCWarning(lcCardDav) << Q_FUNC_INFO << uri << "cannot be recreated (" << httpError
                << "), and no held contact has its uid:" << holders
                << "- aborting, the modification stays pending";
+    abortUpsync(reply, httpError);
+}
+
+// Logs the contact that stopped the sync, then stops it.
+void CardDav::abortUpsync(QNetworkReply *reply, int httpError)
+{
+    q->recordUpsynced(reply->property("addressbookUrl").toString(), upsyncedUid(reply), upsyncedOperation(reply),
+                      Buteo::TargetResults::ITEM_OPERATION_FAILED,
+                      (httpError ? QStringLiteral("HTTP %1").arg(httpError) : reply->errorString())
+                          + QStringLiteral(" - sync aborted"));
     errorOccurred(httpError);
 }
 
